@@ -23,6 +23,7 @@ export interface LoopDeps {
   runVerifier: (cwd: string) => Promise<VerifierResult>;
   evaluateArtifact: (c: Contract, v: VerifierResult) => Promise<{ score: number | null; findings: string[] }>;
   createWorktree: (projectPath: string, root: string, branch: string) => Promise<{ path: string; branch: string }>;
+  commitWorktree: (worktreePath: string, message: string) => Promise<boolean>;
   removeWorktree: (projectPath: string, path: string) => Promise<void>;
 }
 
@@ -54,6 +55,17 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
     return store.read();
   };
 
+  // Halt gracefully: commit whatever partial work exists so a rejected/halted run
+  // stays reviewable on the branch (the commit is for review, not endorsement —
+  // the score + transcript carry the quality signal), then render + mark halted.
+  // The outer finally still removes the worktree; the branch + its commits survive.
+  const haltRun = async (reason: string): Promise<RunState> => {
+    await deps.commitWorktree(wt.path, `sprint ${state.currentSprint}: partial work — halted (${reason})`);
+    traceEvent({ phase: "DECIDE", outputDigest: `halt:${reason}` });
+    finalize(runDir, trace);
+    return halt(reason);
+  };
+
   try {
     const sprints = await deps.planSprints(config.goal);
     store.update({ sprints });
@@ -79,9 +91,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
         });
       } catch (e) {
         if (e instanceof BudgetHalt) {
-          traceEvent({ phase: "NEGOTIATE", outputDigest: `halt:${e.reason}` });
-          finalize(runDir, trace);
-          return halt(e.reason); // outer finally still removes the worktree; branch survives
+          return await haltRun(e.reason); // outer finally still removes the worktree; branch survives
         }
         throw e;
       }
@@ -102,8 +112,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
         // able to silently drive an advance or a no-progress decision.
         if (evalRes.score === null) {
           traceEvent({ phase: "EVALUATE", agentRole: "evaluator", outputDigest: "score UNPARSEABLE" });
-          finalize(runDir, trace);
-          return halt("evaluator-parse-error");
+          return await haltRun("evaluator-parse-error");
         }
 
         budget.recordScore(evalRes.score);
@@ -111,10 +120,17 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
         store.update({ scores: state.scores, budgetSpentUsd: budget.spent });
         traceEvent({ phase: "EVALUATE", agentRole: "evaluator", outputDigest: `score ${evalRes.score}` });
 
-        if (evalRes.score >= config.thresholds.advanceScore) { passed = true; break; }
+        if (evalRes.score >= config.thresholds.advanceScore) {
+          // Commit this sprint's work to the run branch BEFORE cleanup, so it
+          // survives removeWorktree's --force and is actually reviewable.
+          await deps.commitWorktree(wt.path, `sprint ${sprint.id} "${sprint.title}" passed (score ${evalRes.score})`);
+          traceEvent({ phase: "DECIDE", outputDigest: `advance (score ${evalRes.score})` });
+          passed = true;
+          break;
+        }
 
         const stop = budget.checkStops(deps.nowMs());
-        if (stop) { finalize(runDir, trace); return halt(stop); }
+        if (stop) { return await haltRun(stop); }
       }
     }
 

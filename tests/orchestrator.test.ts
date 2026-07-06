@@ -20,6 +20,7 @@ const happyDeps = (): LoopDeps => ({
   runVerifier: async () => ({ passed: true, findings: [] }),
   evaluateArtifact: async () => ({ score: 90, findings: [] }),
   createWorktree: async () => ({ path: "/tmp/wt", branch: "run/g-r1" }),
+  commitWorktree: async () => true,
   removeWorktree: async () => {},
 });
 

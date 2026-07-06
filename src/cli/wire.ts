@@ -4,7 +4,7 @@ import type { QueryFn } from "../agents/invoke.js";
 import { planSprints } from "../agents/planner.js";
 import { proposeContract, generateCode } from "../agents/generator.js";
 import { critiqueContract, evaluateArtifact } from "../agents/evaluator.js";
-import { createWorktree, removeWorktree } from "../workspace/worktree.js";
+import { createWorktree, commitWorktree, removeWorktree } from "../workspace/worktree.js";
 import { TestSuiteVerifier } from "../verifier/test-suite.js";
 
 export function wireDeps(config: RunConfig, queryFn: QueryFn): LoopDeps {
@@ -19,6 +19,7 @@ export function wireDeps(config: RunConfig, queryFn: QueryFn): LoopDeps {
     runVerifier: (cwd) => verifier.verify(cwd),
     evaluateArtifact: (c, v) => evaluateArtifact({ queryFn, model: config.models.evaluator }, c, v),
     createWorktree,
+    commitWorktree,
     removeWorktree,
   };
 }
