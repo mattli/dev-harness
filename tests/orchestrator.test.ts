@@ -36,6 +36,20 @@ test("halts when score never reaches threshold (max-iteration)", async () => {
   expect(state.haltReason).toBe("max-iteration");
 });
 
+test("halts on an unparseable evaluator score (error, never treated as 0)", async () => {
+  let removed = false;
+  const deps: LoopDeps = {
+    ...happyDeps(),
+    evaluateArtifact: async () => ({ score: null, findings: [] }),
+    removeWorktree: async () => { removed = true; },
+  };
+  const state = await runLoop(cfg(), deps);
+  expect(state.status).toBe("halted");
+  expect(state.haltReason).toBe("evaluator-parse-error");
+  expect(state.scores).toEqual([]); // null never pushed as a score
+  expect(removed).toBe(true);
+});
+
 test("halts mid-negotiation when a backstop trips before the first Opus call", async () => {
   // startMs = first nowMs() call (0); every later call exceeds wallClockMs.
   let calls = 0;

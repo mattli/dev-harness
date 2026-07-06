@@ -21,7 +21,7 @@ export interface LoopDeps {
   critiqueContract: (c: Contract) => Promise<{ agreed: boolean; contract: Contract }>;
   generateCode: (c: Contract, cwd: string) => Promise<AgentResult>;
   runVerifier: (cwd: string) => Promise<VerifierResult>;
-  evaluateArtifact: (c: Contract, v: VerifierResult) => Promise<{ score: number; findings: string[] }>;
+  evaluateArtifact: (c: Contract, v: VerifierResult) => Promise<{ score: number | null; findings: string[] }>;
   createWorktree: (projectPath: string, root: string, branch: string) => Promise<{ path: string; branch: string }>;
   removeWorktree: (projectPath: string, path: string) => Promise<void>;
 }
@@ -97,6 +97,15 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
 
         const verified = await deps.runVerifier(wt.path);
         const evalRes = await deps.evaluateArtifact(contract, verified);
+
+        // An unparseable score is an ERROR, never a 0 — a flaky parse must not be
+        // able to silently drive an advance or a no-progress decision.
+        if (evalRes.score === null) {
+          traceEvent({ phase: "EVALUATE", agentRole: "evaluator", outputDigest: "score UNPARSEABLE" });
+          finalize(runDir, trace);
+          return halt("evaluator-parse-error");
+        }
+
         budget.recordScore(evalRes.score);
         state.scores.push(evalRes.score);
         store.update({ scores: state.scores, budgetSpentUsd: budget.spent });
