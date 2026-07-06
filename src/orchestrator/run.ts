@@ -42,6 +42,16 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   };
   store.init(state);
 
+  // Single source of truth for run state: keep the in-memory `state` authoritative
+  // and persist the same patch. traceEvent, the halt commit message, and the
+  // transcript all read the in-memory `state`, so disk and memory must never
+  // diverge (a prior bug persisted currentSprint/contractVersion to disk only,
+  // leaving every trace event stuck at sprint 0 / contract v0).
+  const update = (patch: Partial<RunState>): void => {
+    Object.assign(state, patch);
+    store.update(patch);
+  };
+
   const traceEvent = (over: Partial<Parameters<TraceWriter["write"]>[0]>) =>
     trace.write({
       ts: new Date(deps.nowMs()).toISOString(), runId: config.runId, sprint: state.currentSprint,
@@ -52,7 +62,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   const wt = await deps.createWorktree(config.projectPath, config.worktreeRoot, branch);
 
   const halt = (reason: string): RunState => {
-    store.update({ status: "halted", haltReason: reason, budgetSpentUsd: budget.spent });
+    update({ status: "halted", haltReason: reason, budgetSpentUsd: budget.spent });
     return store.read();
   };
 
@@ -69,11 +79,11 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
 
   try {
     const sprints = await deps.planSprints(config.goal);
-    store.update({ sprints });
+    update({ sprints });
     traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: `${sprints.length} sprints` });
 
     for (const sprint of sprints) {
-      store.update({ currentSprint: sprint.id });
+      update({ currentSprint: sprint.id });
       budget.resetSprint();
 
       let contract: Contract;
@@ -96,7 +106,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
         }
         throw e;
       }
-      store.update({ contractVersion: contract.version });
+      update({ contractVersion: contract.version });
       traceEvent({ phase: "NEGOTIATE", contractVersion: contract.version, outputDigest: "frozen" });
 
       let passed = false;
@@ -122,7 +132,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
 
         budget.recordScore(evalRes.score);
         state.scores.push(evalRes.score);
-        store.update({ scores: state.scores, budgetSpentUsd: budget.spent });
+        update({ scores: state.scores, budgetSpentUsd: budget.spent });
         traceEvent({ phase: "EVALUATE", agentRole: "evaluator", outputDigest: `score ${evalRes.score}` });
 
         if (evalRes.score >= config.thresholds.advanceScore) {
@@ -139,7 +149,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
       }
     }
 
-    store.update({ status: "passed", budgetSpentUsd: budget.spent });
+    update({ status: "passed", budgetSpentUsd: budget.spent });
     finalize(runDir, trace);
     return store.read();
   } finally {

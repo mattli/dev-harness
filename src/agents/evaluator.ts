@@ -32,15 +32,23 @@ export function buildEvaluatePrompt(contract: Contract, artifactDiff: string, ve
   ].filter(Boolean).join("\n\n");
 }
 
-/** Extract the evaluator's 0–100 score. Returns `null` when NO score is present,
- *  so callers can distinguish "no score found" (a parse/format failure) from a
- *  genuine grade of 0 — never conflate them when driving advance/no-progress.
- *  Tolerant of markdown/heading/trailing text; takes the LAST score mention. */
+/** Extract the evaluator's 0–100 score. Returns `null` when NO labelled score is
+ *  present, so callers can distinguish "no score found" (a parse/format failure)
+ *  from a genuine grade of 0 — never conflate them when driving advance/no-progress.
+ *
+ *  Requires a SCORE *label* (a colon/equals after "score"): prose mentions like
+ *  "score of 0" or "aim for a score of 95" lack the label and cannot hijack the
+ *  grade. Tolerant of markdown (`**SCORE:** 88`, `## Score: 90`) and trailing text
+ *  (`SCORE: 88/100`).
+ *
+ *  Selection rule — take the FIRST labelled score, deliberately. The evaluator
+ *  prompt puts its verdict ("SCORE: <n>") BEFORE the findings, so the first label
+ *  is the verdict; a later labelled number (e.g. a finding quoting `score=0` from
+ *  the code under test) is NOT the grade. */
 export function parseScore(text: string): number | null {
-  const matches = [...text.matchAll(/score[^0-9]*(\d{1,3})/gi)];
+  const matches = [...text.matchAll(/score\s*[:=]\s*\**\s*(\d{1,3})/gi)];
   if (matches.length === 0) return null;
-  const last = matches[matches.length - 1];
-  return Math.min(100, parseInt(last[1], 10));
+  return Math.min(100, parseInt(matches[0][1], 10));
 }
 
 export async function critiqueContract(

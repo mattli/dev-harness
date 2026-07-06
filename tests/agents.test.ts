@@ -45,6 +45,20 @@ test("parseScore tolerates markdown/trailing text and never conflates null with 
   expect(parseScore("no score anywhere in this text")).toBeNull();
 });
 
+// Blocker #1 regression: the evaluator ends with "SCORE: <n>" THEN lists findings.
+// A prose mention of a score in a finding must not hijack the grade.
+test("parseScore requires a label so post-SCORE findings can't hijack the grade", () => {
+  expect(parseScore("SCORE: 88\n- The current score of 0 for edge cases is a problem")).toBe(88);
+  expect(parseScore("SCORE: 88\n- Aim for a score of 95 next round")).toBe(88);
+});
+
+// When MULTIPLE genuinely-labelled scores appear (the verdict + a finding quoting
+// a labelled score from the code under test), the FIRST label — the verdict — wins.
+test("parseScore takes the verdict (first labelled score), not a labelled score quoted in a finding", () => {
+  expect(parseScore("SCORE: 88\n- the code sets score=0 which is wrong")).toBe(88);
+  expect(parseScore("SCORE: 91\n- found `score: 40` hardcoded in config.js")).toBe(91);
+});
+
 // C1 plumbing: the generator now receives the goal + sprint (tested property).
 test("generator prompts contain the goal and the sprint (C1)", () => {
   const propose = buildProposePrompt("add sum.js exporting sum(a,b)", sprint, null);

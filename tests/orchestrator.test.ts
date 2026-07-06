@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runLoop, type LoopDeps } from "../src/orchestrator/run.js";
@@ -29,6 +29,33 @@ test("happy path: one sprint passes, status=passed", async () => {
   const state = await runLoop(cfg(), happyDeps());
   expect(state.status).toBe("passed");
   expect(state.scores).toContain(90);
+});
+
+// Blocker #2 regression: currentSprint/contractVersion must reach the trace (the
+// spec's primary review artifact), not stay stuck at the initial 0. Would have
+// caught the disk-only-update bug that collapsed multi-sprint runs under Sprint 0.
+test("multi-sprint run records distinct sprint numbers + contract versions in trace/transcript", async () => {
+  const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+  const deps: LoopDeps = {
+    ...happyDeps(),
+    runsDir,
+    planSprints: async () => [
+      { id: 0, title: "S0", description: "d0" },
+      { id: 1, title: "S1", description: "d1" },
+    ],
+  };
+  const state = await runLoop(cfg(), deps);
+  expect(state.status).toBe("passed");
+
+  const trace = readFileSync(join(runsDir, "r1", "trace.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l));
+  const gen = trace.filter((e) => e.phase === "GENERATE");
+  expect([...new Set(gen.map((e) => e.sprint))].sort()).toEqual([0, 1]); // not collapsed to 0
+  expect(gen.every((e) => e.contractVersion > 0)).toBe(true);           // not stale v0
+
+  const transcript = readFileSync(join(runsDir, "r1", "transcript.md"), "utf8");
+  expect(transcript).toContain("## Sprint 0");
+  expect(transcript).toContain("## Sprint 1");
 });
 
 test("halts when score never reaches threshold (max-iteration)", async () => {
