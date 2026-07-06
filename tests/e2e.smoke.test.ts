@@ -30,4 +30,19 @@ maybe("2+2 goal runs the full loop end to end for a few cents", async () => {
   });
   const state = await runLoop(config, wireDeps(config, query as any));
   expect(["passed", "halted"]).toContain(state.status);
+
+  // (a) C1: the on-goal artifact is actually committed on the surviving branch —
+  // not just present in a discarded working tree. Find the run branch, and assert
+  // some committed file references "sum" and implements a + b.
+  const branchList = await execa("git", ["-C", project, "branch", "--list", "run/*"], { reject: false });
+  const branch = branchList.stdout.split("\n")[0].replace(/^\*?\s*/, "").trim();
+  expect(branch).toMatch(/^run\//);
+  const tree = await execa("git", ["-C", project, "ls-tree", "-r", "--name-only", branch], { reject: false });
+  const files = tree.stdout.split("\n").filter(Boolean);
+  let onGoal = false;
+  for (const f of files) {
+    const c = await execa("git", ["-C", project, "show", `${branch}:${f}`], { reject: false });
+    if (/sum/i.test(f + c.stdout) && /a\s*\+\s*b/.test(c.stdout)) { onGoal = true; break; }
+  }
+  expect(onGoal, `expected an on-goal sum implementation committed; branch files: ${files.join(", ")}`).toBe(true);
 }, 420000); // vitest timeout MUST exceed caps.wallClockMs so the loop can halt and return

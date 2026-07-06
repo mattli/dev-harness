@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runLoop, type LoopDeps } from "../src/orchestrator/run.js";
 import { loadConfig } from "../src/config/load.js";
-import { createWorktree, commitWorktree, removeWorktree } from "../src/workspace/worktree.js";
+import { createWorktree, commitWorktree, worktreeDiff, removeWorktree } from "../src/workspace/worktree.js";
 
 // Real git + real worktree/commit/remove; agents are faked but generateCode
 // writes a REAL file into the worktree. This exercises the boundary the unit
@@ -27,13 +27,14 @@ function realGitDeps(runsDir: string, score: number): LoopDeps {
     nowMs: () => 0,
     runsDir,
     planSprints: async () => [{ id: 0, title: "add sum", description: "d" }],
-    proposeContract: async (prev) => ({ version: (prev?.version ?? 0) + 1, criteria: [], frozen: false }),
-    critiqueContract: async (c) => ({ agreed: true, contract: c }),
-    generateCode: async (_c, cwd) => {
+    proposeContract: async (_sprint, prev) => ({ version: (prev?.contract.version ?? 0) + 1, criteria: [], frozen: false }),
+    critiqueContract: async (_sprint, c) => ({ agreed: true, contract: c, critique: "ok" }),
+    generateCode: async (_sprint, _c, cwd) => {
       writeFileSync(join(cwd, "sum.js"), "module.exports.sum = (a, b) => a + b;\n");
       return { text: "wrote sum.js", costUsd: 0, tokens: 0, toolCalls: ["Write"] };
     },
     runVerifier: async () => ({ passed: true, findings: [] }),
+    worktreeDiff,
     evaluateArtifact: async () => ({ score, findings: [] }),
     createWorktree,
     commitWorktree,

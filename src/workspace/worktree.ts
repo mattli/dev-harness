@@ -26,6 +26,15 @@ export async function commitWorktree(worktreePath: string, message: string): Pro
   return true;
 }
 
+/** The produced artifact as a diff: stage everything (incl. new untracked files)
+ *  and diff against HEAD. This is what the blind evaluator grades — the actual
+ *  changed code, with no commit messages and no generator transcript. */
+export async function worktreeDiff(worktreePath: string): Promise<string> {
+  await execa("git", ["-C", worktreePath, "add", "-A"], { stdio: "pipe" });
+  const res = await execa("git", ["-C", worktreePath, "diff", "--cached", "HEAD"], { stdio: "pipe" });
+  return res.stdout;
+}
+
 export async function removeWorktree(projectPath: string, path: string): Promise<void> {
   await execa("git", ["-C", projectPath, "worktree", "remove", "--force", path], { stdio: "pipe" });
 }

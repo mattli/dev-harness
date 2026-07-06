@@ -13,8 +13,8 @@ test("parseAgreement reads the sentinel", () => {
 test("negotiate freezes when critique agrees", async () => {
   let round = 0;
   const result = await negotiate({
-    propose: async (prev) => c((prev?.version ?? 0) + 1),
-    critique: async (contract) => { round++; return { agreed: round >= 2, contract }; },
+    propose: async (prev) => c((prev?.contract.version ?? 0) + 1),
+    critique: async (contract) => { round++; return { agreed: round >= 2, contract, critique: "crit" }; },
     maxRounds: 5,
   });
   expect(result.frozen).toBe(true);
@@ -23,12 +23,22 @@ test("negotiate freezes when critique agrees", async () => {
 
 test("negotiate force-freezes at round cap", async () => {
   const result = await negotiate({
-    propose: async (prev) => c((prev?.version ?? 0) + 1),
-    critique: async (contract) => ({ agreed: false, contract }),
+    propose: async (prev) => c((prev?.contract.version ?? 0) + 1),
+    critique: async (contract) => ({ agreed: false, contract, critique: "crit" }),
     maxRounds: 3,
   });
   expect(result.frozen).toBe(true);
   expect(result.version).toBe(3);
+});
+
+test("negotiate feeds the prior contract + critique into the next propose", async () => {
+  const seen: Array<number | null> = [];
+  await negotiate({
+    propose: async (prev) => { seen.push(prev ? prev.contract.version : null); return c((prev?.contract.version ?? 0) + 1); },
+    critique: async (contract) => ({ agreed: contract.version >= 2, contract, critique: `critique of v${contract.version}` }),
+    maxRounds: 5,
+  });
+  expect(seen).toEqual([null, 1]); // round 2's propose saw round 1's contract
 });
 
 test("negotiate runs checkStop at the top of each round and aborts if it throws", async () => {
@@ -36,13 +46,12 @@ test("negotiate runs checkStop at the top of each round and aborts if it throws"
   let checks = 0;
   await expect(
     negotiate({
-      propose: async (prev) => { proposes++; return c((prev?.version ?? 0) + 1); },
-      critique: async (contract) => ({ agreed: false, contract }),
+      propose: async (prev) => { proposes++; return c((prev?.contract.version ?? 0) + 1); },
+      critique: async (contract) => ({ agreed: false, contract, critique: "crit" }),
       maxRounds: 5,
       checkStop: () => { checks++; if (checks >= 2) throw new Error("halt"); },
     }),
   ).rejects.toThrow("halt");
-  // Round 1 checked+proposed; round 2 checked and aborted BEFORE proposing.
   expect(checks).toBe(2);
   expect(proposes).toBe(1);
 });

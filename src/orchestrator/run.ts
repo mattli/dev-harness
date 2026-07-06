@@ -8,7 +8,7 @@ import { StateStore } from "../state/store.js";
 import { TraceWriter } from "../trace/writer.js";
 import { renderTranscript } from "../trace/renderer.js";
 import { BudgetTracker, BudgetHalt } from "../budget/tracker.js";
-import { negotiate } from "../contract/negotiate.js";
+import { negotiate, type PriorRound } from "../contract/negotiate.js";
 import { slugify } from "../workspace/worktree.js";
 import { readFileSync } from "node:fs";
 import { writeFileSync } from "node:fs";
@@ -17,11 +17,12 @@ export interface LoopDeps {
   nowMs: () => number;
   runsDir: string;
   planSprints: (goal: string) => Promise<Sprint[]>;
-  proposeContract: (prev: Contract | null, cwd: string) => Promise<Contract>;
-  critiqueContract: (c: Contract) => Promise<{ agreed: boolean; contract: Contract }>;
-  generateCode: (c: Contract, cwd: string) => Promise<AgentResult>;
+  proposeContract: (sprint: Sprint, prev: PriorRound | null, cwd: string) => Promise<Contract>;
+  critiqueContract: (sprint: Sprint, c: Contract) => Promise<{ agreed: boolean; contract: Contract; critique: string }>;
+  generateCode: (sprint: Sprint, c: Contract, cwd: string) => Promise<AgentResult>;
   runVerifier: (cwd: string) => Promise<VerifierResult>;
-  evaluateArtifact: (c: Contract, v: VerifierResult) => Promise<{ score: number | null; findings: string[] }>;
+  worktreeDiff: (worktreePath: string) => Promise<string>;
+  evaluateArtifact: (c: Contract, artifactDiff: string, v: VerifierResult) => Promise<{ score: number | null; findings: string[] }>;
   createWorktree: (projectPath: string, root: string, branch: string) => Promise<{ path: string; branch: string }>;
   commitWorktree: (worktreePath: string, message: string) => Promise<boolean>;
   removeWorktree: (projectPath: string, path: string) => Promise<void>;
@@ -78,8 +79,8 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
       let contract: Contract;
       try {
         contract = await negotiate({
-          propose: (prev) => deps.proposeContract(prev, wt.path),
-          critique: deps.critiqueContract,
+          propose: (prev) => deps.proposeContract(sprint, prev, wt.path),
+          critique: (c) => deps.critiqueContract(sprint, c),
           maxRounds: config.caps.negotiationRounds,
           // Enforce the wall-clock/$ backstops at the top of every negotiation
           // round, before the next pair of Opus calls — otherwise a long
@@ -101,12 +102,16 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
       let passed = false;
       while (!passed) {
         budget.recordIteration();
-        const gen = await deps.generateCode(contract, wt.path);
+        const gen = await deps.generateCode(sprint, contract, wt.path);
         budget.recordCost(gen.costUsd);
         traceEvent({ phase: "GENERATE", agentRole: "generator", costUsd: gen.costUsd, tokens: gen.tokens, toolCalls: gen.toolCalls });
 
         const verified = await deps.runVerifier(wt.path);
-        const evalRes = await deps.evaluateArtifact(contract, verified);
+        // The evaluator grades the ARTIFACT (diff of the produced changes) against
+        // the frozen contract — blind to the goal/sprint, the generator's
+        // transcript, and commit messages (none of which it receives).
+        const artifactDiff = await deps.worktreeDiff(wt.path);
+        const evalRes = await deps.evaluateArtifact(contract, artifactDiff, verified);
 
         // An unparseable score is an ERROR, never a 0 — a flaky parse must not be
         // able to silently drive an advance or a no-progress decision.
