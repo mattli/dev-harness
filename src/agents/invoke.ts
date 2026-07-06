@@ -43,6 +43,11 @@ async function runOnce(opts: InvokeOpts): Promise<AgentResult> {
   let costUsd = 0;
   let tokens = 0;
   const toolCalls: string[] = [];
+  // Phase 1.5: a single hung agent call is still unguarded here. The orchestrator
+  // enforces wall-clock/$ backstops BETWEEN agent calls (at DECIDE and at the top
+  // of each negotiation round), but nothing interrupts one query() that stalls
+  // mid-stream. Add an AbortController + per-call deadline (config.caps.wallClockMs
+  // as an upper bound, or a dedicated per-call timeout) that aborts this loop.
   for await (const msg of opts.queryFn({
     prompt: opts.prompt,
     options: { model: opts.model, systemPrompt: opts.systemPrompt, cwd: opts.cwd, permissionMode: opts.permissionMode },

@@ -30,3 +30,19 @@ test("negotiate force-freezes at round cap", async () => {
   expect(result.frozen).toBe(true);
   expect(result.version).toBe(3);
 });
+
+test("negotiate runs checkStop at the top of each round and aborts if it throws", async () => {
+  let proposes = 0;
+  let checks = 0;
+  await expect(
+    negotiate({
+      propose: async (prev) => { proposes++; return c((prev?.version ?? 0) + 1); },
+      critique: async (contract) => ({ agreed: false, contract }),
+      maxRounds: 5,
+      checkStop: () => { checks++; if (checks >= 2) throw new Error("halt"); },
+    }),
+  ).rejects.toThrow("halt");
+  // Round 1 checked+proposed; round 2 checked and aborted BEFORE proposing.
+  expect(checks).toBe(2);
+  expect(proposes).toBe(1);
+});

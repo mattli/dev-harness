@@ -1,5 +1,15 @@
 export type StopReason = "max-iteration" | "no-progress" | "dollar-ceiling" | "wall-clock";
 
+/** Thrown to abort work mid-flight when a hard stop trips somewhere the DECIDE
+ *  point can't reach it (e.g. inside the negotiation loop). The orchestrator
+ *  catches it and routes through the same graceful halt-and-return path. */
+export class BudgetHalt extends Error {
+  constructor(public readonly reason: StopReason) {
+    super(`budget halt: ${reason}`);
+    this.name = "BudgetHalt";
+  }
+}
+
 interface Caps { maxIterationsPerSprint: number; negotiationRounds: number; dollarCeiling: number; wallClockMs: number; }
 interface Thresholds { advanceScore: number; noProgressDelta: number; noProgressWindow: number; }
 

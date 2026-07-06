@@ -7,7 +7,7 @@ import type { VerifierResult } from "../verifier/types.js";
 import { StateStore } from "../state/store.js";
 import { TraceWriter } from "../trace/writer.js";
 import { renderTranscript } from "../trace/renderer.js";
-import { BudgetTracker } from "../budget/tracker.js";
+import { BudgetTracker, BudgetHalt } from "../budget/tracker.js";
 import { negotiate } from "../contract/negotiate.js";
 import { slugify } from "../workspace/worktree.js";
 import { readFileSync } from "node:fs";
@@ -63,11 +63,28 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
       store.update({ currentSprint: sprint.id });
       budget.resetSprint();
 
-      const contract = await negotiate({
-        propose: (prev) => deps.proposeContract(prev, wt.path),
-        critique: deps.critiqueContract,
-        maxRounds: config.caps.negotiationRounds,
-      });
+      let contract: Contract;
+      try {
+        contract = await negotiate({
+          propose: (prev) => deps.proposeContract(prev, wt.path),
+          critique: deps.critiqueContract,
+          maxRounds: config.caps.negotiationRounds,
+          // Enforce the wall-clock/$ backstops at the top of every negotiation
+          // round, before the next pair of Opus calls — otherwise a long
+          // negotiation could overshoot the caps between DECIDE-point checks.
+          checkStop: () => {
+            const r = budget.checkStops(deps.nowMs());
+            if (r) throw new BudgetHalt(r);
+          },
+        });
+      } catch (e) {
+        if (e instanceof BudgetHalt) {
+          traceEvent({ phase: "NEGOTIATE", outputDigest: `halt:${e.reason}` });
+          finalize(runDir, trace);
+          return halt(e.reason); // outer finally still removes the worktree; branch survives
+        }
+        throw e;
+      }
       store.update({ contractVersion: contract.version });
       traceEvent({ phase: "NEGOTIATE", contractVersion: contract.version, outputDigest: "frozen" });
 
