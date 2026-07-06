@@ -17,12 +17,17 @@ maybe("2+2 goal runs the full loop end to end for a few cents", async () => {
   await execa("git", ["config", "user.name", "t"], { cwd: project });
   await execa("git", ["commit", "--allow-empty", "-m", "init"], { cwd: project });
 
+  // Tight caps so the loop returns fast and cheap — this is a smoke test that
+  // proves the pipeline turns end to end against the real SDK, not a quality bar.
+  // maxIterationsPerSprint:1 means each sprint gets one generate+evaluate then
+  // advances (score >= 85) or halts (max-iteration); dollarCeiling is the hard
+  // backstop. A clean {passed|halted} return is the proof.
   const config = loadConfig({
     runId: "e2e", goal: "Add sum.js exporting sum(a,b)=a+b with a passing node:test",
     projectPath: project, worktreeRoot: join(project, ".wt"),
-    caps: { dollarCeiling: 2, maxIterationsPerSprint: 3, wallClockMs: 5 * 60 * 1000 },
+    caps: { dollarCeiling: 1, maxIterationsPerSprint: 1, negotiationRounds: 2, wallClockMs: 3 * 60 * 1000 },
     verifier: { command: "node --test" },
   });
   const state = await runLoop(config, wireDeps(config, query as any));
   expect(["passed", "halted"]).toContain(state.status);
-}, 300000);
+}, 420000); // vitest timeout MUST exceed caps.wallClockMs so the loop can halt and return
