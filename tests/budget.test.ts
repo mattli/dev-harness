@@ -33,3 +33,33 @@ test("a big jump resets the flat counter", () => {
   b.recordScore(50); b.recordScore(52); b.recordScore(90); b.recordScore(91);
   expect(b.checkStops(0)).toBeNull(); // only 1 flat since the reset
 });
+
+test("resetSprint clears the iteration counter", () => {
+  const b = new BudgetTracker(caps, thr, 0);
+  for (let i = 0; i < 6; i++) b.recordIteration();
+  expect(b.checkStops(0)).toBe("max-iteration");
+  b.resetSprint();
+  expect(b.checkStops(0)).toBeNull();
+});
+
+test("resetSprint clears the no-progress flat counter", () => {
+  const b = new BudgetTracker(caps, thr, 0);
+  b.recordScore(80); b.recordScore(82); b.recordScore(84);
+  expect(b.checkStops(0)).toBe("no-progress");
+  b.resetSprint();
+  b.recordScore(84); // fresh baseline after reset — no prior score to compare
+  expect(b.checkStops(0)).toBeNull();
+});
+
+test("checkStops precedence: dollar-ceiling wins over max-iteration", () => {
+  const b = new BudgetTracker(caps, thr, 0);
+  b.recordCost(11);
+  for (let i = 0; i < 6; i++) b.recordIteration();
+  expect(b.checkStops(0)).toBe("dollar-ceiling");
+});
+
+test("spent getter returns accumulated cost", () => {
+  const b = new BudgetTracker(caps, thr, 0);
+  b.recordCost(4); b.recordCost(7);
+  expect(b.spent).toBe(11);
+});
