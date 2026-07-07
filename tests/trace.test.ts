@@ -22,6 +22,20 @@ test("writer appends one JSON line per event", () => {
   expect(JSON.parse(lines[1]).phase).toBe("GENERATE");
 });
 
+test("a fresh writer truncates a prior run's trace at the same path", () => {
+  const dir = mkdtempSync(join(tmpdir(), "trace-"));
+  const f = join(dir, "trace.jsonl");
+  // Run 1 leaves two events behind at this path.
+  const w1 = new TraceWriter(f);
+  w1.write(ev()); w1.write(ev({ phase: "GENERATE" }));
+  // Run 2 reuses the same runId → same path. It must start clean, not append.
+  const w2 = new TraceWriter(f);
+  w2.write(ev({ phase: "EVALUATE" }));
+  const lines = readFileSync(f, "utf8").trim().split("\n");
+  expect(lines).toHaveLength(1);
+  expect(JSON.parse(lines[0]).phase).toBe("EVALUATE");
+});
+
 test("renderer groups by sprint and phase", () => {
   const md = renderTranscript([ev(), ev({ phase: "GENERATE", agentRole: "generator" })]);
   expect(md).toContain("# Run r1");
