@@ -1,5 +1,10 @@
 import type { TraceEvent } from "./types.js";
 
+function renderCriteria(contract: NonNullable<TraceEvent["contract"]>): string[] {
+  if (!contract.criteria.length) return ["- criteria: (none)"];
+  return ["- criteria:", ...contract.criteria.map((c) => `  - ${c.id}: ${c.description} [verify: ${c.verifyBy}]`)];
+}
+
 export function renderTranscript(events: TraceEvent[]): string {
   const runId = events[0]?.runId ?? "unknown";
   const lines: string[] = [`# Run ${runId}`, ""];
@@ -12,6 +17,7 @@ export function renderTranscript(events: TraceEvent[]): string {
       e.toolCalls.length ? `- tools: ${e.toolCalls.join(", ")}` : "",
       `- in: ${e.inputDigest}`,
       `- out: ${e.outputDigest}`,
+      ...(e.contract ? renderCriteria(e.contract) : []),
       "",
     );
   }

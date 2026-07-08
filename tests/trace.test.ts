@@ -42,3 +42,18 @@ test("renderer groups by sprint and phase", () => {
   expect(md).toContain("PLAN");
   expect(md).toContain("GENERATE");
 });
+
+test("renderer lists contract criteria when the event carries a frozen contract", () => {
+  const md = renderTranscript([
+    ev({
+      phase: "NEGOTIATE", agentRole: "system", outputDigest: "frozen (round-cap)",
+      contract: {
+        version: 2, frozen: true,
+        criteria: [{ id: "c1", description: "sum(a,b) returns a+b", verifyBy: "node:test" }],
+      },
+    }),
+  ]);
+  expect(md).toContain("frozen (round-cap)");
+  expect(md).toContain("- criteria:");
+  expect(md).toContain("c1: sum(a,b) returns a+b [verify: node:test]");
+});

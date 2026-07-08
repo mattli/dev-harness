@@ -110,7 +110,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
         throw e;
       }
       update({ contractVersion: contract.version, contractFreezeReason: freezeReason });
-      traceEvent({ phase: "NEGOTIATE", contractVersion: contract.version, outputDigest: `frozen (${freezeReason})` });
+      traceEvent({ phase: "NEGOTIATE", contractVersion: contract.version, outputDigest: `frozen (${freezeReason})`, contract });
 
       let passed = false;
       while (!passed) {
