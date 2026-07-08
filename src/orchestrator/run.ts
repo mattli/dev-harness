@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { RunConfig } from "../config/types.js";
 import type { RunState, Sprint } from "../state/types.js";
-import type { Contract } from "../contract/types.js";
+import type { Contract, FreezeReason } from "../contract/types.js";
 import type { AgentResult } from "../agents/invoke.js";
 import type { VerifierResult } from "../verifier/types.js";
 import { StateStore } from "../state/store.js";
@@ -38,7 +38,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   const state: RunState = {
     runId: config.runId, goal: config.goal, status: "running", sprints: [],
     currentSprint: 0, contractVersion: 0, scores: [], iterations: 0,
-    budgetSpentUsd: 0, haltReason: null,
+    budgetSpentUsd: 0, haltReason: null, contractFreezeReason: null,
   };
   store.init(state);
 
@@ -87,8 +87,9 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
       budget.resetSprint();
 
       let contract: Contract;
+      let freezeReason: FreezeReason;
       try {
-        contract = await negotiate({
+        const outcome = await negotiate({
           propose: (prev) => deps.proposeContract(sprint, prev, wt.path),
           critique: (c) => deps.critiqueContract(sprint, c),
           maxRounds: config.caps.negotiationRounds,
@@ -100,14 +101,16 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
             if (r) throw new BudgetHalt(r);
           },
         });
+        contract = outcome.contract;
+        freezeReason = outcome.freezeReason;
       } catch (e) {
         if (e instanceof BudgetHalt) {
           return await haltRun(e.reason); // outer finally still removes the worktree; branch survives
         }
         throw e;
       }
-      update({ contractVersion: contract.version });
-      traceEvent({ phase: "NEGOTIATE", contractVersion: contract.version, outputDigest: "frozen" });
+      update({ contractVersion: contract.version, contractFreezeReason: freezeReason });
+      traceEvent({ phase: "NEGOTIATE", contractVersion: contract.version, outputDigest: `frozen (${freezeReason})`, contract });
 
       let passed = false;
       while (!passed) {

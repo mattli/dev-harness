@@ -42,3 +42,40 @@ test("renderer groups by sprint and phase", () => {
   expect(md).toContain("PLAN");
   expect(md).toContain("GENERATE");
 });
+
+test("renderer lists contract criteria when the event carries a frozen contract", () => {
+  const md = renderTranscript([
+    ev({
+      phase: "NEGOTIATE", agentRole: "system", outputDigest: "frozen (round-cap)",
+      contract: {
+        version: 2, frozen: true,
+        criteria: [{ id: "c1", description: "sum(a,b) returns a+b", verifyBy: "node:test" }],
+      },
+    }),
+  ]);
+  expect(md).toContain("frozen (round-cap)");
+  expect(md).toContain("- criteria:");
+  expect(md).toContain("c1: sum(a,b) returns a+b [verify: node:test]");
+});
+
+test("renderer collapses newlines in criterion fields so each stays on one line", () => {
+  const md = renderTranscript([
+    ev({
+      phase: "NEGOTIATE", agentRole: "system",
+      contract: {
+        version: 1, frozen: true,
+        criteria: [{ id: "c1", description: "first\nsecond", verifyBy: "node:test" }],
+      },
+    }),
+  ]);
+  expect(md).toContain("  - c1: first second [verify: node:test]");
+  expect(md).not.toMatch(/^second/m); // the newline did not spawn a stray line
+});
+
+test("renderer tolerates a NEGOTIATE contract missing its criteria array", () => {
+  const md = renderTranscript([
+    // Simulates a format-skewed / hand-edited trace line read back from disk.
+    ev({ phase: "NEGOTIATE", agentRole: "system", contract: { version: 1, frozen: true } as never }),
+  ]);
+  expect(md).toContain("- criteria: (none)");
+});

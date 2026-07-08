@@ -58,6 +58,49 @@ test("multi-sprint run records distinct sprint numbers + contract versions in tr
   expect(transcript).toContain("## Sprint 1");
 });
 
+test("records the agreement freeze reason in state", async () => {
+  const state = await runLoop(cfg(), happyDeps());
+  expect(state.contractFreezeReason).toBe("agreement");
+});
+
+test("records the round-cap freeze reason in state and transcript", async () => {
+  const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+  const deps: LoopDeps = {
+    ...happyDeps(),
+    runsDir,
+    // Never agree → negotiation is forced to freeze when it hits the round cap.
+    critiqueContract: async (_sprint, c) => ({ agreed: false, contract: c, critique: "no" }),
+  };
+  const state = await runLoop(cfg({ caps: { negotiationRounds: 2 } }), deps);
+  expect(state.status).toBe("passed");
+  expect(state.contractFreezeReason).toBe("round-cap");
+
+  const transcript = readFileSync(join(runsDir, "r1", "transcript.md"), "utf8");
+  expect(transcript).toContain("frozen (round-cap)");
+});
+
+test("NEGOTIATE trace event carries the frozen contract's criteria", async () => {
+  const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+  const deps: LoopDeps = {
+    ...happyDeps(),
+    runsDir,
+    proposeContract: async (_sprint, prev) => ({
+      version: (prev?.contract.version ?? 0) + 1, frozen: false,
+      criteria: [{ id: "c1", description: "sum(a,b)=a+b", verifyBy: "node:test" }],
+    }),
+  };
+  const state = await runLoop(cfg(), deps);
+  expect(state.status).toBe("passed");
+
+  const trace = readFileSync(join(runsDir, "r1", "trace.jsonl"), "utf8")
+    .trim().split("\n").map((l) => JSON.parse(l));
+  const neg = trace.find((e) => e.phase === "NEGOTIATE");
+  expect(neg.contract.criteria[0].id).toBe("c1");
+
+  const transcript = readFileSync(join(runsDir, "r1", "transcript.md"), "utf8");
+  expect(transcript).toContain("c1: sum(a,b)=a+b [verify: node:test]");
+});
+
 test("halts when score never reaches threshold (max-iteration)", async () => {
   const deps = { ...happyDeps(), evaluateArtifact: async () => ({ score: 10, findings: ["bad"] }) };
   const state = await runLoop(cfg({ caps: { maxIterationsPerSprint: 2 } }), deps);
