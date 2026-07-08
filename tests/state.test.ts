@@ -8,7 +8,7 @@ import type { RunState } from "../src/state/types.js";
 const base: RunState = {
   runId: "r1", goal: "g", status: "running", sprints: [],
   currentSprint: 0, contractVersion: 0, scores: [], iterations: 0,
-  budgetSpentUsd: 0, haltReason: null,
+  budgetSpentUsd: 0, haltReason: null, contractFreezeReason: null,
 };
 
 test("round-trips and applies patches", () => {
