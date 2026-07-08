@@ -17,8 +17,9 @@ test("negotiate freezes when critique agrees", async () => {
     critique: async (contract) => { round++; return { agreed: round >= 2, contract, critique: "crit" }; },
     maxRounds: 5,
   });
-  expect(result.frozen).toBe(true);
-  expect(result.version).toBe(2);
+  expect(result.contract.frozen).toBe(true);
+  expect(result.contract.version).toBe(2);
+  expect(result.freezeReason).toBe("agreement");
 });
 
 test("negotiate force-freezes at round cap", async () => {
@@ -27,8 +28,9 @@ test("negotiate force-freezes at round cap", async () => {
     critique: async (contract) => ({ agreed: false, contract, critique: "crit" }),
     maxRounds: 3,
   });
-  expect(result.frozen).toBe(true);
-  expect(result.version).toBe(3);
+  expect(result.contract.frozen).toBe(true);
+  expect(result.contract.version).toBe(3);
+  expect(result.freezeReason).toBe("round-cap");
 });
 
 test("negotiate feeds the prior contract + critique into the next propose", async () => {
