@@ -1,5 +1,5 @@
 import { execa } from "execa";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 export function slugify(goal: string): string {
   return goal.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
@@ -8,7 +8,12 @@ export function slugify(goal: string): string {
 export async function createWorktree(
   projectPath: string, worktreeRoot: string, branch: string,
 ): Promise<{ path: string; branch: string }> {
-  const path = join(worktreeRoot, branch.replace(/\//g, "-"));
+  // Anchor to an absolute path so git (which runs with -C projectPath) and the
+  // SDK agent cwd (resolved against process.cwd()) agree on the same directory.
+  // resolve() leaves an absolute worktreeRoot untouched and anchors a relative
+  // one under the project. A relative path here diverges whenever project !==
+  // process.cwd(), handing the agent a nonexistent cwd → spawn ENOENT.
+  const path = join(resolve(projectPath, worktreeRoot), branch.replace(/\//g, "-"));
   await execa("git", ["-C", projectPath, "worktree", "add", "-b", branch, path], { stdio: "pipe" });
   return { path, branch };
 }
