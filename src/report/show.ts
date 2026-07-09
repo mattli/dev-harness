@@ -9,6 +9,7 @@ import { renderSummary } from "./summary.js";
  *  missing startedAt) don't depend on readdir order. Pure, so it can be tested
  *  against multiple input orderings without touching the filesystem. */
 export function pickLatest(runs: { name: string; state: RunState }[]): RunState {
+  if (!runs.length) throw new Error("pickLatest: no runs to choose from");
   const sorted = [...runs].sort((a, b) =>
     (a.state.startedAt ?? "").localeCompare(b.state.startedAt ?? "") ||
     a.name.localeCompare(b.name));

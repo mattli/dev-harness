@@ -57,6 +57,10 @@ test("pickLatest breaks startedAt ties by folder name, independent of input orde
   expect(pickLatest([b, a]).title).toBe("run-b");
 });
 
+test("pickLatest throws on empty input rather than reading undefined", () => {
+  expect(() => pickLatest([])).toThrow(/no runs/i);
+});
+
 test("pickLatest orders by start time when it differs", () => {
   const older = { name: "2026-07-06-x", state: mkState({ title: "older", startedAt: "2026-07-06T00:00:00.000Z" }) };
   const newer = { name: "2026-07-08-y", state: mkState({ title: "newer", startedAt: "2026-07-08T00:00:00.000Z" }) };
