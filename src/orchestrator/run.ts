@@ -16,7 +16,7 @@ import { writeFileSync } from "node:fs";
 export interface LoopDeps {
   nowMs: () => number;
   runsDir: string;
-  planSprints: (goal: string) => Promise<Sprint[]>;
+  planRun: (goal: string) => Promise<{ title: string; sprints: Sprint[] }>;
   proposeContract: (sprint: Sprint, prev: PriorRound | null, cwd: string) => Promise<Contract>;
   critiqueContract: (sprint: Sprint, c: Contract) => Promise<{ agreed: boolean; contract: Contract; critique: string }>;
   generateCode: (sprint: Sprint, c: Contract, cwd: string) => Promise<AgentResult>;
@@ -79,8 +79,8 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   };
 
   try {
-    const sprints = await deps.planSprints(config.goal);
-    update({ sprints });
+    const { title, sprints } = await deps.planRun(config.goal);
+    update({ title, sprints });
     traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: `${sprints.length} sprints` });
 
     for (const sprint of sprints) {

@@ -1,7 +1,7 @@
 import type { RunConfig } from "../config/types.js";
 import type { LoopDeps } from "../orchestrator/run.js";
 import type { QueryFn } from "../agents/invoke.js";
-import { planSprints } from "../agents/planner.js";
+import { planRun } from "../agents/planner.js";
 import { proposeContract, generateCode } from "../agents/generator.js";
 import { critiqueContract, evaluateArtifact } from "../agents/evaluator.js";
 import { createWorktree, commitWorktree, worktreeDiff, removeWorktree } from "../workspace/worktree.js";
@@ -13,7 +13,7 @@ export function wireDeps(config: RunConfig, queryFn: QueryFn): LoopDeps {
   return {
     nowMs: () => Date.now(),
     runsDir: "runs",
-    planSprints: (g) => planSprints({ queryFn, model: config.models.planner, goal: g }),
+    planRun: (g) => planRun({ queryFn, model: config.models.planner, goal: g }),
     proposeContract: (sprint, prev, cwd) => proposeContract({ queryFn, model: config.models.generator, cwd, goal }, sprint, prev),
     critiqueContract: (sprint, c) => critiqueContract({ queryFn, model: config.models.evaluator, goal }, sprint, c),
     generateCode: (sprint, c, cwd) => generateCode({ queryFn, model: config.models.generator, cwd, goal }, sprint, c),

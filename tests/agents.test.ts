@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { planSprints } from "../src/agents/planner.js";
+import { planRun } from "../src/agents/planner.js";
 import { evaluateArtifact, parseScore, buildEvaluatePrompt, buildCritiquePrompt } from "../src/agents/evaluator.js";
 import { buildProposePrompt, buildGeneratePrompt } from "../src/agents/generator.js";
 import type { QueryFn } from "../src/agents/invoke.js";
@@ -14,12 +14,13 @@ const fakeStream = (text: string): QueryFn => async function* () {
 const sprint: Sprint = { id: 2, title: "Implement sum module", description: "export sum(a,b)=a+b" };
 const contract: Contract = { version: 1, criteria: [{ id: "c1", description: "sum works", verifyBy: "test" }], frozen: true };
 
-test("planner parses sprint JSON", async () => {
-  const q = fakeStream('[{"title":"S1","description":"do a"},{"title":"S2","description":"do b"}]');
-  const sprints = await planSprints({ queryFn: q, model: "m", goal: "g" });
-  expect(sprints).toHaveLength(2);
-  expect(sprints[0].id).toBe(0);
-  expect(sprints[1].title).toBe("S2");
+test("planner parses the title and sprint array", async () => {
+  const q = fakeStream('{"title":"csv-json-converter","sprints":[{"title":"S1","description":"do a"},{"title":"S2","description":"do b"}]}');
+  const plan = await planRun({ queryFn: q, model: "m", goal: "g" });
+  expect(plan.title).toBe("csv-json-converter");
+  expect(plan.sprints).toHaveLength(2);
+  expect(plan.sprints[0].id).toBe(0);
+  expect(plan.sprints[1].title).toBe("S2");
 });
 
 test("evaluator parses SCORE line (grades artifact diff vs contract)", async () => {

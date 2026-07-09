@@ -13,7 +13,7 @@ const cfg = (over = {}) => loadConfig({
 const happyDeps = (): LoopDeps => ({
   nowMs: () => 0,
   runsDir: mkdtempSync(join(tmpdir(), "runs-")),
-  planSprints: async () => [{ id: 0, title: "S", description: "d" }],
+  planRun: async () => ({ title: "test-run", sprints: [{ id: 0, title: "S", description: "d" }] }),
   proposeContract: async (_sprint, prev) => ({ version: (prev?.contract.version ?? 0) + 1, criteria: [], frozen: false }),
   critiqueContract: async (_sprint, c) => ({ agreed: true, contract: c, critique: "ok" }),
   generateCode: async () => ({ text: "done", costUsd: 0.1, tokens: 10, toolCalls: [] }),
@@ -39,10 +39,10 @@ test("multi-sprint run records distinct sprint numbers + contract versions in tr
   const deps: LoopDeps = {
     ...happyDeps(),
     runsDir,
-    planSprints: async () => [
+    planRun: async () => ({ title: "test-run", sprints: [
       { id: 0, title: "S0", description: "d0" },
       { id: 1, title: "S1", description: "d1" },
-    ],
+    ] }),
   };
   const state = await runLoop(cfg(), deps);
   expect(state.status).toBe("passed");
