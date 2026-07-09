@@ -97,7 +97,11 @@ export function renderTranscript(events: TraceEvent[], state: RunState): string 
     // work under a "not reached" label).
     let s = stageState(sprint.id, state);
     if (s === "pending" && stageEvents.some((e) => e.phase === "GENERATE")) s = "stopped";
-    lines.push(...stageBlock(sprint, stageEvents, s, state.haltReason));
+    // Only the stage that actually stopped (currentSprint) carries the run-level
+    // halt reason, so a later stage reclassified via the fallback above can't
+    // also claim to be where the run died.
+    const reason = sprint.id === state.currentSprint ? state.haltReason : null;
+    lines.push(...stageBlock(sprint, stageEvents, s, reason));
   }
   return lines.join("\n").replace(/\n{3,}/g, "\n\n");
 }

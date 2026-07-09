@@ -2,8 +2,14 @@ import { expect, test } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { latestRunSummary } from "../src/report/show.js";
+import { latestRunSummary, pickLatest } from "../src/report/show.js";
 import type { RunState } from "../src/state/types.js";
+
+const mkState = (over: Partial<RunState>): RunState => ({
+  runId: "x", goal: "g", title: "demo", startedAt: "2026-07-08T00:00:00.000Z",
+  status: "passed", sprints: [], currentSprint: 0, contractVersion: 1, scores: [],
+  iterations: 0, budgetSpentUsd: 0, haltReason: null, contractFreezeReason: "agreement", ...over,
+});
 
 const writeRun = (runsDir: string, proj: string, folder: string, state: Partial<RunState>) => {
   const dir = join(runsDir, proj, folder);
@@ -42,14 +48,20 @@ test("latestRunSummary skips folders without a readable state.json", () => {
   expect(out).toContain("good-run");
 });
 
-test("latestRunSummary breaks startedAt ties deterministically by folder name", () => {
-  const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+test("pickLatest breaks startedAt ties by folder name, independent of input order", () => {
   const ts = "2026-07-08T00:00:00.000Z"; // identical start time (concurrent runs)
-  writeRun(runsDir, "csv-tool", "2026-07-08-run-a", { title: "run-a", startedAt: ts });
-  writeRun(runsDir, "csv-tool", "2026-07-08-run-b", { title: "run-b", startedAt: ts });
-  // Deterministic across runs: the lexically-greater folder name wins the tie.
-  expect(latestRunSummary(runsDir, "/tmp/csv-tool")).toContain("run-b");
-  expect(latestRunSummary(runsDir, "/tmp/csv-tool")).toContain("run-b");
+  const a = { name: "2026-07-08-run-a", state: mkState({ title: "run-a", startedAt: ts }) };
+  const b = { name: "2026-07-08-run-b", state: mkState({ title: "run-b", startedAt: ts }) };
+  // Same winner regardless of the order the entries were read from disk.
+  expect(pickLatest([a, b]).title).toBe("run-b");
+  expect(pickLatest([b, a]).title).toBe("run-b");
+});
+
+test("pickLatest orders by start time when it differs", () => {
+  const older = { name: "2026-07-06-x", state: mkState({ title: "older", startedAt: "2026-07-06T00:00:00.000Z" }) };
+  const newer = { name: "2026-07-08-y", state: mkState({ title: "newer", startedAt: "2026-07-08T00:00:00.000Z" }) };
+  expect(pickLatest([newer, older]).title).toBe("newer");
+  expect(pickLatest([older, newer]).title).toBe("newer");
 });
 
 test("latestRunSummary throws a clear error when the project has no runs", () => {

@@ -139,6 +139,22 @@ test("halts when score never reaches threshold (max-iteration)", async () => {
   expect(state.haltReason).toBe("max-iteration");
 });
 
+// Real-I/O boundary: the transcript is rendered inside haltRun, so it must be
+// written AFTER the halt status/reason are set — a unit test that injects state
+// can't catch the ordering bug where the on-disk transcript still says "running".
+test("a halted run's on-disk transcript shows the stop outcome, not 'running'", async () => {
+  const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+  const config = cfg({ caps: { maxIterationsPerSprint: 2 } });
+  const deps = { ...happyDeps(), runsDir, evaluateArtifact: async () => ({ score: 10, findings: ["bad"] }) };
+  const state = await runLoop(config, deps);
+  expect(state.status).toBe("halted");
+
+  const transcript = readFileSync(join(runDirOf(config, runsDir), "transcript.md"), "utf8");
+  expect(transcript).toContain("Stopped"); // the outcome line reflects the halt
+  expect(transcript).not.toContain("Still running");
+  expect(transcript).toContain("max-iteration"); // the reason is surfaced
+});
+
 test("halts on an unparseable evaluator score (error, never treated as 0)", async () => {
   let removed = false;
   const deps: LoopDeps = {

@@ -104,8 +104,12 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   const haltRun = async (reason: string): Promise<RunState> => {
     await deps.commitWorktree(wt.path, `sprint ${state.currentSprint}: partial work — halted (${reason})`);
     traceEvent({ phase: "DECIDE", outputDigest: `halt:${reason}` });
+    // Set status/haltReason on `state` BEFORE rendering, or the transcript is
+    // written while the run still looks "running" — the outcome line and the
+    // per-stage stop reason would both be missing from the on-disk transcript.
+    const result = halt(reason);
     finalize(runDir, trace, state);
-    return halt(reason);
+    return result;
   };
 
   try {
