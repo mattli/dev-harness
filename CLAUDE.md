@@ -40,3 +40,12 @@ works. Don't ask him to review diffs himself. When a change needs review (see "A
 Fix Is Unreviewed Code"), arrange an independent review (e.g. /code-review) and
 translate the findings into plain language and a recommendation, rather than
 handing him the diff.
+
+## The Run Transcript Is a Product Surface, Not a Debug Log
+The transcript/summary a run produces is the primary thing Matt reads to understand
+what happened — often over SSH, in raw form, with no code context. It must be legible
+to a non-coder: open with a plain-language summary, narrate each stage in words, and
+never assume the reader knows what "in/out", contract versions, or a run ID like
+`mrbb5z` mean. When adding fields to the trace or transcript, ask "would this read as
+gibberish to someone who's never seen the code?" — if so, label it or leave it out.
+Prefer named/dated run folders over opaque hashes for the same reason.
