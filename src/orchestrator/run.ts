@@ -10,8 +10,8 @@ import { renderTranscript } from "../trace/renderer.js";
 import { BudgetTracker, BudgetHalt } from "../budget/tracker.js";
 import { negotiate, type PriorRound } from "../contract/negotiate.js";
 import { slugify } from "../workspace/worktree.js";
-import { readFileSync } from "node:fs";
-import { writeFileSync } from "node:fs";
+import { buildRunDir, projectSlug } from "../state/run-path.js";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 
 export interface LoopDeps {
   nowMs: () => number;
@@ -29,16 +29,28 @@ export interface LoopDeps {
 }
 
 export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunState> {
-  const runDir = join(deps.runsDir, config.runId);
+  // Plan first: the run folder name needs the planner's title, so the whole run
+  // directory (state.json, trace.jsonl, transcript.md) is created only after we
+  // know it. The internal runId still identifies the run in state + the branch.
+  // Read the clock once: startedAt, the folder date, and the budget start must
+  // all reference the same instant (and adding clock reads here must not shift
+  // the budget's start time — a backstop regression).
+  const startMs = deps.nowMs();
+  const startedAt = new Date(startMs).toISOString();
+  const plan = await deps.planRun(config.goal);
+
+  const projDir = join(deps.runsDir, projectSlug(config.projectPath));
+  const siblings = (() => { try { return readdirSync(projDir); } catch { return []; } })();
+  const runDir = buildRunDir(deps.runsDir, config.projectPath, plan.title, startMs, siblings);
+
   const store = new StateStore(join(runDir, "state.json"));
   const trace = new TraceWriter(join(runDir, "trace.jsonl"));
-  const budget = new BudgetTracker(config.caps, config.thresholds, deps.nowMs());
+  const budget = new BudgetTracker(config.caps, config.thresholds, startMs);
   const branch = `run/${slugify(config.goal)}-${config.runId}`;
 
   const state: RunState = {
-    runId: config.runId, goal: config.goal, title: config.goal,
-    startedAt: new Date(deps.nowMs()).toISOString(), status: "running", sprints: [],
-    currentSprint: 0, contractVersion: 0, scores: [], iterations: 0,
+    runId: config.runId, goal: config.goal, title: plan.title, startedAt, status: "running",
+    sprints: plan.sprints, currentSprint: 0, contractVersion: 0, scores: [], iterations: 0,
     budgetSpentUsd: 0, haltReason: null, contractFreezeReason: null,
   };
   store.init(state);
@@ -79,11 +91,9 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   };
 
   try {
-    const { title, sprints } = await deps.planRun(config.goal);
-    update({ title, sprints });
-    traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: `${sprints.length} sprints` });
+    traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: `${plan.sprints.length} sprints` });
 
-    for (const sprint of sprints) {
+    for (const sprint of plan.sprints) {
       update({ currentSprint: sprint.id });
       budget.resetSprint();
 

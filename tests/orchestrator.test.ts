@@ -4,11 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runLoop, type LoopDeps } from "../src/orchestrator/run.js";
 import { loadConfig } from "../src/config/load.js";
+import { buildRunDir } from "../src/state/run-path.js";
 
 const cfg = (over = {}) => loadConfig({
   runId: "r1", goal: "g", projectPath: mkdtempSync(join(tmpdir(), "p-")),
   worktreeRoot: mkdtempSync(join(tmpdir(), "w-")), ...over,
 });
+
+// The run folder the loop will create, given a fake planRun title of "test-run"
+// and nowMs()=0. Config carries projectPath + runId; siblings start empty.
+const runDirOf = (config: { projectPath: string }, runsDir: string) =>
+  buildRunDir(runsDir, config.projectPath, "test-run", 0, []);
 
 const happyDeps = (): LoopDeps => ({
   nowMs: () => 0,
@@ -36,6 +42,7 @@ test("happy path: one sprint passes, status=passed", async () => {
 // caught the disk-only-update bug that collapsed multi-sprint runs under Sprint 0.
 test("multi-sprint run records distinct sprint numbers + contract versions in trace/transcript", async () => {
   const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+  const config = cfg();
   const deps: LoopDeps = {
     ...happyDeps(),
     runsDir,
@@ -44,16 +51,17 @@ test("multi-sprint run records distinct sprint numbers + contract versions in tr
       { id: 1, title: "S1", description: "d1" },
     ] }),
   };
-  const state = await runLoop(cfg(), deps);
+  const state = await runLoop(config, deps);
   expect(state.status).toBe("passed");
 
-  const trace = readFileSync(join(runsDir, "r1", "trace.jsonl"), "utf8")
+  const dir = runDirOf(config, runsDir);
+  const trace = readFileSync(join(dir, "trace.jsonl"), "utf8")
     .trim().split("\n").map((l) => JSON.parse(l));
   const gen = trace.filter((e) => e.phase === "GENERATE");
   expect([...new Set(gen.map((e) => e.sprint))].sort()).toEqual([0, 1]); // not collapsed to 0
   expect(gen.every((e) => e.contractVersion > 0)).toBe(true);           // not stale v0
 
-  const transcript = readFileSync(join(runsDir, "r1", "transcript.md"), "utf8");
+  const transcript = readFileSync(join(dir, "transcript.md"), "utf8");
   expect(transcript).toContain("## Sprint 0");
   expect(transcript).toContain("## Sprint 1");
 });
@@ -71,11 +79,12 @@ test("records the round-cap freeze reason in state and transcript", async () => 
     // Never agree → negotiation is forced to freeze when it hits the round cap.
     critiqueContract: async (_sprint, c) => ({ agreed: false, contract: c, critique: "no" }),
   };
-  const state = await runLoop(cfg({ caps: { negotiationRounds: 2 } }), deps);
+  const config = cfg({ caps: { negotiationRounds: 2 } });
+  const state = await runLoop(config, deps);
   expect(state.status).toBe("passed");
   expect(state.contractFreezeReason).toBe("round-cap");
 
-  const transcript = readFileSync(join(runsDir, "r1", "transcript.md"), "utf8");
+  const transcript = readFileSync(join(runDirOf(config, runsDir), "transcript.md"), "utf8");
   expect(transcript).toContain("frozen (round-cap)");
 });
 
@@ -89,15 +98,17 @@ test("NEGOTIATE trace event carries the frozen contract's criteria", async () =>
       criteria: [{ id: "c1", description: "sum(a,b)=a+b", verifyBy: "node:test" }],
     }),
   };
-  const state = await runLoop(cfg(), deps);
+  const config = cfg();
+  const state = await runLoop(config, deps);
   expect(state.status).toBe("passed");
 
-  const trace = readFileSync(join(runsDir, "r1", "trace.jsonl"), "utf8")
+  const dir = runDirOf(config, runsDir);
+  const trace = readFileSync(join(dir, "trace.jsonl"), "utf8")
     .trim().split("\n").map((l) => JSON.parse(l));
   const neg = trace.find((e) => e.phase === "NEGOTIATE");
   expect(neg.contract.criteria[0].id).toBe("c1");
 
-  const transcript = readFileSync(join(runsDir, "r1", "transcript.md"), "utf8");
+  const transcript = readFileSync(join(dir, "transcript.md"), "utf8");
   expect(transcript).toContain("c1: sum(a,b)=a+b [verify: node:test]");
 });
 
