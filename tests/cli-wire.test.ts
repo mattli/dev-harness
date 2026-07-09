@@ -5,7 +5,7 @@ import { loadConfig } from "../src/config/load.js";
 test("wireDeps returns a fully-populated LoopDeps", () => {
   const cfg = loadConfig({ runId: "r1", goal: "g", projectPath: "/tmp/app" });
   const deps = wireDeps(cfg, (async function* () {})() as any);
-  for (const k of ["planSprints", "proposeContract", "critiqueContract", "generateCode",
+  for (const k of ["planRun", "proposeContract", "critiqueContract", "generateCode",
                    "runVerifier", "worktreeDiff", "evaluateArtifact", "createWorktree", "commitWorktree", "removeWorktree", "nowMs", "runsDir"]) {
     expect(deps).toHaveProperty(k);
   }

@@ -26,7 +26,7 @@ function realGitDeps(runsDir: string, score: number): LoopDeps {
   return {
     nowMs: () => 0,
     runsDir,
-    planSprints: async () => [{ id: 0, title: "add sum", description: "d" }],
+    planRun: async () => ({ title: "add-sum", sprints: [{ id: 0, title: "add sum", description: "d" }] }),
     proposeContract: async (_sprint, prev) => ({ version: (prev?.contract.version ?? 0) + 1, criteria: [], frozen: false }),
     critiqueContract: async (_sprint, c) => ({ agreed: true, contract: c, critique: "ok" }),
     generateCode: async (_sprint, _c, cwd) => {

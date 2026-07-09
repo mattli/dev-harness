@@ -6,7 +6,8 @@ import { StateStore } from "../src/state/store.js";
 import type { RunState } from "../src/state/types.js";
 
 const base: RunState = {
-  runId: "r1", goal: "g", status: "running", sprints: [],
+  runId: "r1", goal: "g", title: "g", startedAt: "2026-07-08T00:00:00.000Z",
+  status: "running", sprints: [],
   currentSprint: 0, contractVersion: 0, scores: [], iterations: 0,
   budgetSpentUsd: 0, haltReason: null, contractFreezeReason: null,
 };

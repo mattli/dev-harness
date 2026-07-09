@@ -9,14 +9,13 @@ import { TraceWriter } from "../trace/writer.js";
 import { renderTranscript } from "../trace/renderer.js";
 import { BudgetTracker, BudgetHalt } from "../budget/tracker.js";
 import { negotiate, type PriorRound } from "../contract/negotiate.js";
-import { slugify } from "../workspace/worktree.js";
-import { readFileSync } from "node:fs";
-import { writeFileSync } from "node:fs";
+import { reserveRunDir, runBranch } from "../state/run-path.js";
+import { readFileSync, writeFileSync } from "node:fs";
 
 export interface LoopDeps {
   nowMs: () => number;
   runsDir: string;
-  planSprints: (goal: string) => Promise<Sprint[]>;
+  planRun: (goal: string) => Promise<{ title: string; sprints: Sprint[] }>;
   proposeContract: (sprint: Sprint, prev: PriorRound | null, cwd: string) => Promise<Contract>;
   critiqueContract: (sprint: Sprint, c: Contract) => Promise<{ agreed: boolean; contract: Contract; critique: string }>;
   generateCode: (sprint: Sprint, c: Contract, cwd: string) => Promise<AgentResult>;
@@ -29,15 +28,38 @@ export interface LoopDeps {
 }
 
 export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunState> {
-  const runDir = join(deps.runsDir, config.runId);
+  // Plan first: the run folder name needs the planner's title, so the whole run
+  // directory (state.json, trace.jsonl, transcript.md) is created only after we
+  // know it. The internal runId still identifies the run in state + the branch.
+  // Read the clock once: startedAt, the folder date, and the budget start must
+  // all reference the same instant (and adding clock reads here must not shift
+  // the budget's start time — a backstop regression).
+  const startMs = deps.nowMs();
+  const startedAt = new Date(startMs).toISOString();
+
+  // A planner failure must still leave an inspectable run on disk (as it did
+  // before planning moved ahead of run-dir creation). Catch it, fall back to the
+  // goal for the folder name, and halt below with a persisted record.
+  let plan: { title: string; sprints: Sprint[] };
+  let planError: unknown = null;
+  try {
+    plan = await deps.planRun(config.goal);
+  } catch (e) {
+    planError = e;
+    plan = { title: config.goal, sprints: [] };
+  }
+
+  // reserveRunDir creates the folder atomically so two concurrent same-title runs
+  // on the same day can't compute the same path and clobber each other.
+  const runDir = reserveRunDir(deps.runsDir, config.projectPath, plan.title, startMs);
   const store = new StateStore(join(runDir, "state.json"));
   const trace = new TraceWriter(join(runDir, "trace.jsonl"));
-  const budget = new BudgetTracker(config.caps, config.thresholds, deps.nowMs());
-  const branch = `run/${slugify(config.goal)}-${config.runId}`;
+  const budget = new BudgetTracker(config.caps, config.thresholds, startMs);
+  const branch = runBranch(config.goal, config.runId);
 
   const state: RunState = {
-    runId: config.runId, goal: config.goal, status: "running", sprints: [],
-    currentSprint: 0, contractVersion: 0, scores: [], iterations: 0,
+    runId: config.runId, goal: config.goal, title: plan.title, startedAt, runDir, status: "running",
+    sprints: plan.sprints, currentSprint: 0, contractVersion: 0, scores: [], iterations: 0,
     budgetSpentUsd: 0, haltReason: null, contractFreezeReason: null,
   };
   store.init(state);
@@ -59,6 +81,15 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
       inputDigest: "", toolCalls: [], outputDigest: "", tokens: 0, costUsd: 0, ...over,
     });
 
+  // Planning failed: persist a halted, inspectable run and stop before creating
+  // any worktree (nothing to clean up on this path).
+  if (planError) {
+    traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: "planner-error" });
+    update({ status: "halted", haltReason: "planner-error", budgetSpentUsd: budget.spent });
+    finalize(runDir, trace, state);
+    return store.read();
+  }
+
   const wt = await deps.createWorktree(config.projectPath, config.worktreeRoot, branch);
 
   const halt = (reason: string): RunState => {
@@ -73,16 +104,18 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   const haltRun = async (reason: string): Promise<RunState> => {
     await deps.commitWorktree(wt.path, `sprint ${state.currentSprint}: partial work — halted (${reason})`);
     traceEvent({ phase: "DECIDE", outputDigest: `halt:${reason}` });
-    finalize(runDir, trace);
-    return halt(reason);
+    // Set status/haltReason on `state` BEFORE rendering, or the transcript is
+    // written while the run still looks "running" — the outcome line and the
+    // per-stage stop reason would both be missing from the on-disk transcript.
+    const result = halt(reason);
+    finalize(runDir, trace, state);
+    return result;
   };
 
   try {
-    const sprints = await deps.planSprints(config.goal);
-    update({ sprints });
-    traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: `${sprints.length} sprints` });
+    traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: `${plan.sprints.length} sprints` });
 
-    for (const sprint of sprints) {
+    for (const sprint of plan.sprints) {
       update({ currentSprint: sprint.id });
       budget.resetSprint();
 
@@ -136,7 +169,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
         budget.recordScore(evalRes.score);
         state.scores.push(evalRes.score);
         update({ scores: state.scores, budgetSpentUsd: budget.spent });
-        traceEvent({ phase: "EVALUATE", agentRole: "evaluator", outputDigest: `score ${evalRes.score}` });
+        traceEvent({ phase: "EVALUATE", agentRole: "evaluator", outputDigest: `score ${evalRes.score}`, score: evalRes.score });
 
         if (evalRes.score >= config.thresholds.advanceScore) {
           // Commit this sprint's work to the run branch BEFORE cleanup, so it
@@ -153,15 +186,15 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
     }
 
     update({ status: "passed", budgetSpentUsd: budget.spent });
-    finalize(runDir, trace);
+    finalize(runDir, trace, state);
     return store.read();
   } finally {
     await deps.removeWorktree(config.projectPath, wt.path); // branch survives for review
   }
 }
 
-function finalize(runDir: string, trace: TraceWriter): void {
+function finalize(runDir: string, trace: TraceWriter, state: RunState): void {
   const events = readFileSync(join(runDir, "trace.jsonl"), "utf8")
     .trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
-  writeFileSync(join(runDir, "transcript.md"), renderTranscript(events));
+  writeFileSync(join(runDir, "transcript.md"), renderTranscript(events, state));
 }
