@@ -32,3 +32,11 @@ finding re-introduces the exact blind spot the review existed to catch. A cosmet
 or comment-only change does not. The lesson isn't "review every fix"; it's "the
 fixes that touch how things work, especially late close-out fixes that bypassed
 normal review, are where self-approval bites."
+
+## Matt Owns the Product Here, Not the Code
+Matt directs this project but does not read the implementation. Explain changes
+at a product-manager altitude — what it does and why it matters, not how the code
+works. Don't ask him to review diffs himself. When a change needs review (see "A
+Fix Is Unreviewed Code"), arrange an independent review (e.g. /code-review) and
+translate the findings into plain language and a recommendation, rather than
+handing him the diff.
