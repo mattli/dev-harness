@@ -12,13 +12,18 @@ export function latestRunSummary(runsDir: string, projectPath: string): string {
   const dir = join(runsDir, projectSlug(projectPath));
   let entries: string[];
   try { entries = readdirSync(dir); } catch { entries = []; }
-  const runs: RunState[] = [];
+  const runs: { name: string; state: RunState }[] = [];
   for (const name of entries) {
     try {
-      runs.push(JSON.parse(readFileSync(join(dir, name, "state.json"), "utf8")) as RunState);
+      runs.push({ name, state: JSON.parse(readFileSync(join(dir, name, "state.json"), "utf8")) as RunState });
     } catch { /* not a run directory, or state.json unreadable — skip it */ }
   }
   if (!runs.length) throw new Error(`no runs found for project at ${projectPath}`);
-  runs.sort((a, b) => (a.startedAt ?? "").localeCompare(b.startedAt ?? ""));
-  return renderSummary(runs[runs.length - 1]);
+  // Sort by start time, then by folder name as a deterministic tiebreak: runs
+  // sharing a timestamp (concurrent runs, or both missing startedAt) must not
+  // fall back to non-deterministic readdir order.
+  runs.sort((a, b) =>
+    (a.state.startedAt ?? "").localeCompare(b.state.startedAt ?? "") ||
+    a.name.localeCompare(b.name));
+  return renderSummary(runs[runs.length - 1].state);
 }

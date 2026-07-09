@@ -92,6 +92,26 @@ test("the stage the run died on is 'stopped', not 'not reached'; later stages ar
   expect(md).not.toContain("$0.0000");
 });
 
+test("a stage whose final grade was a parse-error shows 'stopped' + reason, not a stale score", () => {
+  const s = st({ status: "halted", haltReason: "evaluator-parse-error", currentSprint: 0 });
+  const md = renderTranscript([
+    ev({ phase: "GENERATE", agentRole: "generator", sprint: 0, costUsd: 0.10, toolCalls: ["Write"] }),
+    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 40", score: 40 }),
+    ev({ phase: "GENERATE", agentRole: "generator", sprint: 0, costUsd: 0.20, toolCalls: ["Edit"] }),
+    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score UNPARSEABLE" }),
+  ], s);
+  expect(md).toContain("✗ stopped");
+  expect(md).not.toContain("last score 40"); // the earlier score must not masquerade as the final grade
+  expect(md).toContain("Stopped: evaluator-parse-error"); // the reason is surfaced even with GENERATE events
+});
+
+test("transcript tolerates a malformed GENERATE line (missing cost/tools) without NaN or throwing", () => {
+  const broken = { ...ev({ phase: "GENERATE", sprint: 0 }), costUsd: undefined as never, toolCalls: undefined as never };
+  let md = "";
+  expect(() => { md = renderTranscript([broken], st()); }).not.toThrow();
+  expect(md).not.toContain("NaN");
+});
+
 test("transcript still surfaces a stage's frozen requirements (criteria)", () => {
   const md = renderTranscript([
     ev({ phase: "NEGOTIATE", agentRole: "system", sprint: 0, outputDigest: "frozen (round-cap)",

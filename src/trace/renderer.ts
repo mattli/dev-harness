@@ -20,11 +20,13 @@ function narrate(toolCalls: string[]): string {
   return parts.length ? parts.join(", ") : "no file changes recorded";
 }
 
-/** The last recorded score for the stage, read from the structured field on the
- *  EVALUATE event (not scraped from the digest text). */
+/** The stage's final score, from the structured field on the LAST EVALUATE event
+ *  (not scraped from the digest text). Returns null when the last evaluation had
+ *  no numeric score — e.g. an evaluator-parse-error halt — so a stage that ended
+ *  on a grading failure is not mislabeled with an earlier retry's score. */
 function scoreOf(events: TraceEvent[]): number | null {
-  const evalEv = [...events].reverse().find((e) => e.phase === "EVALUATE" && typeof e.score === "number");
-  return evalEv?.score ?? null;
+  const evalEv = [...events].reverse().find((e) => e.phase === "EVALUATE");
+  return typeof evalEv?.score === "number" ? evalEv.score : null;
 }
 
 function criteriaLines(events: TraceEvent[]): string[] {
@@ -54,10 +56,12 @@ function stageBlock(sprint: Sprint, events: TraceEvent[], s: StageState, haltRea
       `  Not started — the run stopped at an earlier stage.`, ""];
   }
   // Sum across every GENERATE attempt: a stage can regenerate several times, and
-  // reporting only the first attempt undercounts both cost and work done.
+  // reporting only the first attempt undercounts both cost and work done. Guard
+  // each field — finalize() parses trace.jsonl back from disk, which may be
+  // format-skewed or hand-edited (see criteriaLines).
   const gens = events.filter((e) => e.phase === "GENERATE");
-  const cost = gens.reduce((sum, e) => sum + e.costUsd, 0);
-  const tools = gens.flatMap((e) => e.toolCalls);
+  const cost = gens.reduce((sum, e) => sum + (e.costUsd ?? 0), 0);
+  const tools = gens.flatMap((e) => e.toolCalls ?? []);
   const score = scoreOf(events);
 
   if (s === "stopped" && gens.length === 0) {
@@ -69,9 +73,13 @@ function stageBlock(sprint: Sprint, events: TraceEvent[], s: StageState, haltRea
   const marker = s === "done"
     ? (score === null ? "✓ done" : `✓ ${score}/100`)
     : (score === null ? "✗ stopped" : `✗ stopped (last score ${score}/100)`);
+  // For a stopped stage, always surface why — even when it generated code and the
+  // final grade was a parse error (score null), the reason must not vanish.
+  const reasonNote = s === "stopped" && haltReason ? [`  Stopped: ${haltReason}.`] : [];
   return [
     `## Stage ${sprint.id} — ${sprint.title}   [${marker}] · $${cost.toFixed(2)}`,
     `  ${narrate(tools)}.`,
+    ...reasonNote,
     ...criteriaLines(events),
     "",
   ];
@@ -84,7 +92,12 @@ export function renderTranscript(events: TraceEvent[], state: RunState): string 
   const lines: string[] = [renderSummary(state), "────────────────────────────────────────────", ""];
   for (const sprint of state.sprints) {
     const stageEvents = events.filter((e) => e.sprint === sprint.id);
-    lines.push(...stageBlock(sprint, stageEvents, stageState(sprint.id, state), state.haltReason));
+    // A stage with GENERATE events was reached even if currentSprint disagrees
+    // (guards against a disk/memory divergence that would otherwise drop real
+    // work under a "not reached" label).
+    let s = stageState(sprint.id, state);
+    if (s === "pending" && stageEvents.some((e) => e.phase === "GENERATE")) s = "stopped";
+    lines.push(...stageBlock(sprint, stageEvents, s, state.haltReason));
   }
   return lines.join("\n").replace(/\n{3,}/g, "\n\n");
 }

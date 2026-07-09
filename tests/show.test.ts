@@ -42,6 +42,16 @@ test("latestRunSummary skips folders without a readable state.json", () => {
   expect(out).toContain("good-run");
 });
 
+test("latestRunSummary breaks startedAt ties deterministically by folder name", () => {
+  const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+  const ts = "2026-07-08T00:00:00.000Z"; // identical start time (concurrent runs)
+  writeRun(runsDir, "csv-tool", "2026-07-08-run-a", { title: "run-a", startedAt: ts });
+  writeRun(runsDir, "csv-tool", "2026-07-08-run-b", { title: "run-b", startedAt: ts });
+  // Deterministic across runs: the lexically-greater folder name wins the tie.
+  expect(latestRunSummary(runsDir, "/tmp/csv-tool")).toContain("run-b");
+  expect(latestRunSummary(runsDir, "/tmp/csv-tool")).toContain("run-b");
+});
+
 test("latestRunSummary throws a clear error when the project has no runs", () => {
   const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
   expect(() => latestRunSummary(runsDir, "/tmp/nope")).toThrow(/no runs/i);
