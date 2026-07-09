@@ -3,7 +3,7 @@ import type { FreezeReason } from "../contract/types.js";
 export type RunStatus = "running" | "passed" | "halted";
 export interface Sprint { id: number; title: string; description: string; }
 export interface RunState {
-  runId: string; goal: string; status: RunStatus;
+  runId: string; goal: string; title: string; startedAt: string; status: RunStatus;
   sprints: Sprint[]; currentSprint: number; contractVersion: number;
   scores: number[]; iterations: number; budgetSpentUsd: number;
   haltReason: string | null;

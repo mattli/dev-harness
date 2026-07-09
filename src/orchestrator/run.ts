@@ -36,7 +36,8 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   const branch = `run/${slugify(config.goal)}-${config.runId}`;
 
   const state: RunState = {
-    runId: config.runId, goal: config.goal, status: "running", sprints: [],
+    runId: config.runId, goal: config.goal, title: config.goal,
+    startedAt: new Date(deps.nowMs()).toISOString(), status: "running", sprints: [],
     currentSprint: 0, contractVersion: 0, scores: [], iterations: 0,
     budgetSpentUsd: 0, haltReason: null, contractFreezeReason: null,
   };
