@@ -3,6 +3,8 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { loadConfig } from "../config/load.js";
 import { runLoop } from "../orchestrator/run.js";
 import { wireDeps } from "./wire.js";
+import { renderSummary } from "../report/summary.js";
+import { latestRunSummary } from "../report/show.js";
 
 const program = new Command();
 program
@@ -22,7 +24,19 @@ program
     });
     console.log(`[dev-harness] run ${runId} — goal: ${config.goal}`);
     const state = await runLoop(config, wireDeps(config, query as any));
-    console.log(`[dev-harness] status=${state.status} reason=${state.haltReason ?? "-"} spent=$${state.budgetSpentUsd.toFixed(2)}`);
-    console.log(`[dev-harness] branch run/... left in ${config.projectPath}; transcript in runs/${runId}/transcript.md`);
+    console.log("\n" + renderSummary(state));
   });
+
+program
+  .command("show")
+  .requiredOption("--project <path>")
+  .action((opts) => {
+    try {
+      console.log(latestRunSummary("runs", opts.project));
+    } catch (e) {
+      console.error(`[dev-harness] ${(e as Error).message}`);
+      process.exitCode = 1;
+    }
+  });
+
 program.parseAsync();
