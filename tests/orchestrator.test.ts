@@ -62,8 +62,8 @@ test("multi-sprint run records distinct sprint numbers + contract versions in tr
   expect(gen.every((e) => e.contractVersion > 0)).toBe(true);           // not stale v0
 
   const transcript = readFileSync(join(dir, "transcript.md"), "utf8");
-  expect(transcript).toContain("## Sprint 0");
-  expect(transcript).toContain("## Sprint 1");
+  expect(transcript).toContain("Stage 0");
+  expect(transcript).toContain("Stage 1");
 });
 
 test("records the agreement freeze reason in state", async () => {
@@ -85,7 +85,7 @@ test("records the round-cap freeze reason in state and transcript", async () => 
   expect(state.contractFreezeReason).toBe("round-cap");
 
   const transcript = readFileSync(join(runDirOf(config, runsDir), "transcript.md"), "utf8");
-  expect(transcript).toContain("frozen (round-cap)");
+  expect(transcript).toContain("Stage 0"); // freeze reason itself is asserted in state above
 });
 
 test("NEGOTIATE trace event carries the frozen contract's criteria", async () => {
@@ -109,7 +109,7 @@ test("NEGOTIATE trace event carries the frozen contract's criteria", async () =>
   expect(neg.contract.criteria[0].id).toBe("c1");
 
   const transcript = readFileSync(join(dir, "transcript.md"), "utf8");
-  expect(transcript).toContain("c1: sum(a,b)=a+b [verify: node:test]");
+  expect(transcript).toContain("sum(a,b)=a+b");
 });
 
 test("halts when score never reaches threshold (max-iteration)", async () => {

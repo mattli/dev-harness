@@ -86,7 +86,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   const haltRun = async (reason: string): Promise<RunState> => {
     await deps.commitWorktree(wt.path, `sprint ${state.currentSprint}: partial work — halted (${reason})`);
     traceEvent({ phase: "DECIDE", outputDigest: `halt:${reason}` });
-    finalize(runDir, trace);
+    finalize(runDir, trace, state);
     return halt(reason);
   };
 
@@ -164,15 +164,15 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
     }
 
     update({ status: "passed", budgetSpentUsd: budget.spent });
-    finalize(runDir, trace);
+    finalize(runDir, trace, state);
     return store.read();
   } finally {
     await deps.removeWorktree(config.projectPath, wt.path); // branch survives for review
   }
 }
 
-function finalize(runDir: string, trace: TraceWriter): void {
+function finalize(runDir: string, trace: TraceWriter, state: RunState): void {
   const events = readFileSync(join(runDir, "trace.jsonl"), "utf8")
     .trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
-  writeFileSync(join(runDir, "transcript.md"), renderTranscript(events));
+  writeFileSync(join(runDir, "transcript.md"), renderTranscript(events, state));
 }
