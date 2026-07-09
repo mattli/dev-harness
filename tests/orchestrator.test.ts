@@ -112,6 +112,26 @@ test("NEGOTIATE trace event carries the frozen contract's criteria", async () =>
   expect(transcript).toContain("sum(a,b)=a+b");
 });
 
+test("a planner failure persists an inspectable halted run instead of crashing", async () => {
+  const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+  let worktreeCreated = false;
+  const config = cfg();
+  const deps: LoopDeps = {
+    ...happyDeps(), runsDir,
+    planRun: async () => { throw new Error("model returned garbage"); },
+    createWorktree: async () => { worktreeCreated = true; return { path: "/tmp/wt", branch: "run/g-r1" }; },
+  };
+  const state = await runLoop(config, deps);
+  expect(state.status).toBe("halted");
+  expect(state.haltReason).toBe("planner-error");
+  expect(worktreeCreated).toBe(false); // stopped before any worktree was made
+
+  // The run must survive on disk for post-mortem; state carries its folder.
+  expect(state.runDir).toBeTruthy();
+  expect(readFileSync(join(state.runDir!, "state.json"), "utf8")).toContain("planner-error");
+  expect(readFileSync(join(state.runDir!, "transcript.md"), "utf8")).toContain("could not plan the run");
+});
+
 test("halts when score never reaches threshold (max-iteration)", async () => {
   const deps = { ...happyDeps(), evaluateArtifact: async () => ({ score: 10, findings: ["bad"] }) };
   const state = await runLoop(cfg({ caps: { maxIterationsPerSprint: 2 } }), deps);

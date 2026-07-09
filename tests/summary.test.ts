@@ -8,7 +8,8 @@ const base = (over: Partial<RunState> = {}): RunState => ({
   sprints: [{ id: 0, title: "a", description: "" }, { id: 1, title: "b", description: "" },
             { id: 2, title: "c", description: "" }, { id: 3, title: "d", description: "" }],
   currentSprint: 3, contractVersion: 5, scores: [100, 98, 96], iterations: 3,
-  budgetSpentUsd: 6.8, haltReason: "dollar-ceiling", contractFreezeReason: "agreement", ...over,
+  budgetSpentUsd: 6.8, haltReason: "dollar-ceiling", contractFreezeReason: "agreement",
+  runDir: "runs/csv-tool/2026-07-08-csv-json-converter", ...over,
 });
 
 test("dollar-ceiling summary names the limit and spend, and gives no advice", () => {
@@ -41,4 +42,15 @@ test("an unknown halt code degrades gracefully instead of throwing", () => {
 
 test("a run with no scores yet says so", () => {
   expect(renderSummary(base({ scores: [] }))).toContain("no stages scored yet");
+});
+
+test("the summary tells you which folder holds the run's artifacts", () => {
+  expect(renderSummary(base())).toContain("Folder:   runs/csv-tool/2026-07-08-csv-json-converter");
+});
+
+test("a legacy run missing startedAt renders instead of crashing", () => {
+  const legacy = base();
+  delete (legacy as { startedAt?: string }).startedAt;
+  expect(() => renderSummary(legacy)).not.toThrow();
+  expect(renderSummary(legacy)).toContain("unknown date");
 });

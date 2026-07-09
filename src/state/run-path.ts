@@ -1,5 +1,12 @@
 import { basename, join } from "node:path";
+import { mkdirSync, readdirSync } from "node:fs";
 import { slugify } from "../workspace/worktree.js";
+
+/** The run branch name. Single source shared by the orchestrator (which creates
+ *  the branch) and the summary (which reports it) so the two can never drift. */
+export function runBranch(goal: string, runId: string): string {
+  return `run/${slugify(goal)}-${runId}`;
+}
 
 /** Human-readable project slug from the --project path (its folder name). */
 export function projectSlug(projectPath: string): string {
@@ -23,4 +30,26 @@ export function buildRunDir(
   let name = stem;
   for (let n = 2; taken.has(name); n++) name = `${stem}-${n}`;
   return join(runsDir, projectSlug(projectPath), name);
+}
+
+/** Atomically reserve a unique run directory. buildRunDir alone races: two
+ *  concurrent runs with the same project+title+date both scan siblings, see no
+ *  collision, and pick the same path. Here we create the leaf dir with
+ *  recursive:false (which fails EEXIST if another run won the race) and retry
+ *  against a fresh sibling scan until the mkdir succeeds. */
+export function reserveRunDir(
+  runsDir: string, projectPath: string, title: string, nowMs: number,
+): string {
+  const projDir = join(runsDir, projectSlug(projectPath));
+  mkdirSync(projDir, { recursive: true });
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const dir = buildRunDir(runsDir, projectPath, title, nowMs, readdirSync(projDir));
+    try {
+      mkdirSync(dir, { recursive: false });
+      return dir;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    }
+  }
+  throw new Error("could not reserve a unique run directory");
 }

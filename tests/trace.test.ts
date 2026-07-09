@@ -52,7 +52,7 @@ test("transcript narrates a stage with its title, score, cost, and tool counts",
   const md = renderTranscript([
     ev({ phase: "GENERATE", agentRole: "generator", sprint: 0, costUsd: 0.72,
          toolCalls: ["Write", "Write", "Bash"] }),
-    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100" }),
+    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100", score: 100 }),
   ], st());
   expect(md).toContain("Stage 0 — Scaffolding");
   expect(md).toContain("100/100");
@@ -61,16 +61,33 @@ test("transcript narrates a stage with its title, score, cost, and tool counts",
   expect(md).toContain("ran 1 command");
 });
 
-test("transcript shows a not-reached stage's halt reason and never prints fake $0.0000", () => {
+test("a stage that retried sums cost and tools across all its attempts", () => {
+  const md = renderTranscript([
+    ev({ phase: "GENERATE", agentRole: "generator", sprint: 0, costUsd: 0.10, toolCalls: ["Write"] }),
+    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 40", score: 40 }),
+    ev({ phase: "GENERATE", agentRole: "generator", sprint: 0, costUsd: 0.20, toolCalls: ["Edit", "Bash"] }),
+    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 90", score: 90 }),
+  ], st());
+  expect(md).toContain("$0.30");        // 0.10 + 0.20, not just the first attempt
+  expect(md).toContain("90/100");        // the last score, not the failed 40
+  expect(md).toContain("created 1 file");
+  expect(md).toContain("revised 1 time");
+  expect(md).toContain("ran 1 command");
+});
+
+test("the stage the run died on is 'stopped', not 'not reached'; later stages are not reached", () => {
   const s = st({ status: "halted", haltReason: "dollar-ceiling", currentSprint: 1,
     sprints: [{ id: 0, title: "Scaffolding", description: "" },
-              { id: 1, title: "Parsing", description: "" }] });
+              { id: 1, title: "Parsing", description: "" },
+              { id: 2, title: "CLI", description: "" }] });
   const md = renderTranscript([
     ev({ phase: "GENERATE", agentRole: "generator", sprint: 0, costUsd: 0.72, toolCalls: ["Write"] }),
-    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100" }),
+    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100", score: 100 }),
     ev({ phase: "DECIDE", agentRole: "system", sprint: 1, outputDigest: "halt:dollar-ceiling" }),
   ], s);
-  expect(md).toContain("Stage 1 — Parsing");
+  expect(md).toMatch(/Stage 1 — Parsing.*stopped/s);
+  expect(md).toContain("stopped while preparing this stage (dollar-ceiling)");
+  expect(md).toContain("Stage 2 — CLI");
   expect(md).toContain("not reached");
   expect(md).not.toContain("$0.0000");
 });
@@ -80,7 +97,7 @@ test("transcript still surfaces a stage's frozen requirements (criteria)", () =>
     ev({ phase: "NEGOTIATE", agentRole: "system", sprint: 0, outputDigest: "frozen (round-cap)",
          contract: { version: 1, frozen: true,
            criteria: [{ id: "c1", description: "sum(a,b)=a+b", verifyBy: "node:test" }] } }),
-    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100" }),
+    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100", score: 100 }),
   ], st());
   expect(md).toContain("sum(a,b)=a+b");
 });
@@ -90,7 +107,7 @@ test("transcript collapses newlines in a criterion so it stays on one line", () 
     ev({ phase: "NEGOTIATE", agentRole: "system", sprint: 0,
          contract: { version: 1, frozen: true,
            criteria: [{ id: "c1", description: "first\nsecond", verifyBy: "t" }] } }),
-    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100" }),
+    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100", score: 100 }),
   ], st());
   expect(md).toContain("first second");
   expect(md).not.toMatch(/^second/m);
@@ -99,6 +116,6 @@ test("transcript collapses newlines in a criterion so it stays on one line", () 
 test("transcript tolerates a NEGOTIATE contract missing its criteria array", () => {
   expect(() => renderTranscript([
     ev({ phase: "NEGOTIATE", agentRole: "system", sprint: 0, contract: { version: 1, frozen: true } as never }),
-    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100" }),
+    ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100", score: 100 }),
   ], st())).not.toThrow();
 });

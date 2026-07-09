@@ -9,9 +9,8 @@ import { TraceWriter } from "../trace/writer.js";
 import { renderTranscript } from "../trace/renderer.js";
 import { BudgetTracker, BudgetHalt } from "../budget/tracker.js";
 import { negotiate, type PriorRound } from "../contract/negotiate.js";
-import { slugify } from "../workspace/worktree.js";
-import { buildRunDir, projectSlug } from "../state/run-path.js";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { reserveRunDir, runBranch } from "../state/run-path.js";
+import { readFileSync, writeFileSync } from "node:fs";
 
 export interface LoopDeps {
   nowMs: () => number;
@@ -37,19 +36,29 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   // the budget's start time — a backstop regression).
   const startMs = deps.nowMs();
   const startedAt = new Date(startMs).toISOString();
-  const plan = await deps.planRun(config.goal);
 
-  const projDir = join(deps.runsDir, projectSlug(config.projectPath));
-  const siblings = (() => { try { return readdirSync(projDir); } catch { return []; } })();
-  const runDir = buildRunDir(deps.runsDir, config.projectPath, plan.title, startMs, siblings);
+  // A planner failure must still leave an inspectable run on disk (as it did
+  // before planning moved ahead of run-dir creation). Catch it, fall back to the
+  // goal for the folder name, and halt below with a persisted record.
+  let plan: { title: string; sprints: Sprint[] };
+  let planError: unknown = null;
+  try {
+    plan = await deps.planRun(config.goal);
+  } catch (e) {
+    planError = e;
+    plan = { title: config.goal, sprints: [] };
+  }
 
+  // reserveRunDir creates the folder atomically so two concurrent same-title runs
+  // on the same day can't compute the same path and clobber each other.
+  const runDir = reserveRunDir(deps.runsDir, config.projectPath, plan.title, startMs);
   const store = new StateStore(join(runDir, "state.json"));
   const trace = new TraceWriter(join(runDir, "trace.jsonl"));
   const budget = new BudgetTracker(config.caps, config.thresholds, startMs);
-  const branch = `run/${slugify(config.goal)}-${config.runId}`;
+  const branch = runBranch(config.goal, config.runId);
 
   const state: RunState = {
-    runId: config.runId, goal: config.goal, title: plan.title, startedAt, status: "running",
+    runId: config.runId, goal: config.goal, title: plan.title, startedAt, runDir, status: "running",
     sprints: plan.sprints, currentSprint: 0, contractVersion: 0, scores: [], iterations: 0,
     budgetSpentUsd: 0, haltReason: null, contractFreezeReason: null,
   };
@@ -71,6 +80,15 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
       phase: "PLAN", agentRole: "system", contractVersion: state.contractVersion,
       inputDigest: "", toolCalls: [], outputDigest: "", tokens: 0, costUsd: 0, ...over,
     });
+
+  // Planning failed: persist a halted, inspectable run and stop before creating
+  // any worktree (nothing to clean up on this path).
+  if (planError) {
+    traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: "planner-error" });
+    update({ status: "halted", haltReason: "planner-error", budgetSpentUsd: budget.spent });
+    finalize(runDir, trace, state);
+    return store.read();
+  }
 
   const wt = await deps.createWorktree(config.projectPath, config.worktreeRoot, branch);
 
@@ -147,7 +165,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
         budget.recordScore(evalRes.score);
         state.scores.push(evalRes.score);
         update({ scores: state.scores, budgetSpentUsd: budget.spent });
-        traceEvent({ phase: "EVALUATE", agentRole: "evaluator", outputDigest: `score ${evalRes.score}` });
+        traceEvent({ phase: "EVALUATE", agentRole: "evaluator", outputDigest: `score ${evalRes.score}`, score: evalRes.score });
 
         if (evalRes.score >= config.thresholds.advanceScore) {
           // Commit this sprint's work to the run branch BEFORE cleanup, so it

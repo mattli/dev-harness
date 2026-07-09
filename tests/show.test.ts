@@ -19,11 +19,27 @@ const writeRun = (runsDir: string, proj: string, folder: string, state: Partial<
 
 test("latestRunSummary renders the most recent run for a project", () => {
   const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
-  writeRun(runsDir, "csv-tool", "2026-07-06-old", { title: "old-run" });
-  writeRun(runsDir, "csv-tool", "2026-07-08-new", { title: "new-run" });
+  writeRun(runsDir, "csv-tool", "2026-07-06-old", { title: "old-run", startedAt: "2026-07-06T00:00:00.000Z" });
+  writeRun(runsDir, "csv-tool", "2026-07-08-new", { title: "new-run", startedAt: "2026-07-08T00:00:00.000Z" });
   const out = latestRunSummary(runsDir, "/tmp/csv-tool");
   expect(out).toContain("new-run");
   expect(out).not.toContain("old-run");
+});
+
+test("latestRunSummary picks newest by start time, not lexical folder order (-2 vs -10)", () => {
+  const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+  writeRun(runsDir, "csv-tool", "2026-07-08-foo-2", { title: "run-2", startedAt: "2026-07-08T02:00:00.000Z" });
+  writeRun(runsDir, "csv-tool", "2026-07-08-foo-10", { title: "run-10", startedAt: "2026-07-08T10:00:00.000Z" });
+  const out = latestRunSummary(runsDir, "/tmp/csv-tool");
+  expect(out).toContain("run-10"); // lexically "foo-10" < "foo-2", but it started later
+});
+
+test("latestRunSummary skips folders without a readable state.json", () => {
+  const runsDir = mkdtempSync(join(tmpdir(), "runs-"));
+  mkdirSync(join(runsDir, "csv-tool", "2026-07-09-broken"), { recursive: true }); // no state.json
+  writeRun(runsDir, "csv-tool", "2026-07-08-good", { title: "good-run", startedAt: "2026-07-08T00:00:00.000Z" });
+  const out = latestRunSummary(runsDir, "/tmp/csv-tool");
+  expect(out).toContain("good-run");
 });
 
 test("latestRunSummary throws a clear error when the project has no runs", () => {
