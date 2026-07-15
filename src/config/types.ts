@@ -9,8 +9,8 @@ export interface RunConfig {
   caps: {
     maxIterationsPerSprint: number;
     negotiationRounds: number;
-    dollarCeiling: number;
-    wallClockMs: number;
+    dollarCeiling: number | null; // null = off (informational only); set to opt into a $ halt
+    wallClockMsPerSprint: number; // primary cap, scoped per sprint
   };
   verifier: { kind: "test-suite"; command: string };
 }

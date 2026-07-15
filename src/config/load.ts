@@ -16,8 +16,8 @@ const schema = z.object({
   caps: z.object({
     maxIterationsPerSprint: z.number().int().min(1),
     negotiationRounds: z.number().int().min(1),
-    dollarCeiling: z.number().positive(),
-    wallClockMs: z.number().int().positive(),
+    dollarCeiling: z.number().positive().nullable(),
+    wallClockMsPerSprint: z.number().int().positive(),
   }),
   verifier: z.object({ kind: z.literal("test-suite"), command: z.string().min(1) }),
 });
