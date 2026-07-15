@@ -5,6 +5,7 @@ import { runLoop } from "../orchestrator/run.js";
 import { wireDeps } from "./wire.js";
 import { renderSummary } from "../report/summary.js";
 import { latestRunSummary } from "../report/show.js";
+import { buildRunOverrides } from "./overrides.js";
 
 const program = new Command();
 program
@@ -12,16 +13,13 @@ program
   .requiredOption("--goal <goal>")
   .requiredOption("--project <path>")
   .option("--eval-model <model>")
-  .option("--dollar-ceiling <n>", "override $ ceiling", parseFloat)
+  .option("--dollar-ceiling <n>", "opt-in $ ceiling (off by default)", parseFloat)
+  .option("--wall-clock-ms <n>", "per-sprint wall-clock cap in ms", (v) => parseInt(v, 10))
+  .option("--max-iterations <n>", "generate/evaluate retries per sprint", (v) => parseInt(v, 10))
   .option("--test-cmd <cmd>", "verifier command")
   .action(async (opts) => {
     const runId = `${Date.now().toString(36)}`;
-    const config = loadConfig({
-      runId, goal: opts.goal, projectPath: opts.project,
-      models: opts.evalModel ? { evaluator: opts.evalModel } : undefined,
-      caps: opts.dollarCeiling ? { dollarCeiling: opts.dollarCeiling } : undefined,
-      verifier: opts.testCmd ? { command: opts.testCmd } : undefined,
-    });
+    const config = loadConfig(buildRunOverrides(opts, runId));
     console.log(`[dev-harness] run ${runId} — goal: ${config.goal}`);
     const state = await runLoop(config, wireDeps(config, query as any));
     console.log("\n" + renderSummary(state));
