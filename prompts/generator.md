@@ -10,3 +10,7 @@ the critique. When proposing, output ONLY JSON:
 
 When GENERATING, write real files in the working directory to satisfy every
 criterion of the frozen contract for this sprint, then stop. Do not narrate.
+
+You may be working in an existing codebase — read the relevant files before
+writing, match the conventions already in place, and do not rewrite unrelated
+files.
