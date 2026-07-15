@@ -34,8 +34,8 @@ test("planRun caps sprints at 6 and reports the proposed count", async () => {
   expect(res.proposedCount).toBe(8);
 });
 
-test("evaluator parses SCORE line (grades artifact diff vs contract)", async () => {
-  const q = fakeStream("Solid.\nSCORE: 88");
+test("evaluator parses FINAL SCORE line (grades artifact diff vs contract)", async () => {
+  const q = fakeStream("Solid.\nFINAL SCORE: 88");
   const r = await evaluateArtifact(
     { queryFn: q, model: "m", goal: "g" },
     contract,
@@ -48,27 +48,43 @@ test("evaluator parses SCORE line (grades artifact diff vs contract)", async () 
 // Regression: the old anchored /^SCORE:/ parser missed common model formatting
 // and silently returned 0, conflating a format failure with a real zero grade.
 test("parseScore tolerates markdown/trailing text and never conflates null with 0", () => {
-  expect(parseScore("Solid.\nSCORE: 88")).toBe(88);
-  expect(parseScore("**SCORE:** 88")).toBe(88);
-  expect(parseScore("## Score: 90")).toBe(90);
-  expect(parseScore("Final SCORE: 88/100")).toBe(88);
-  expect(parseScore("  score:  0  ")).toBe(0);
-  expect(parseScore("clamps to 100\nSCORE: 250")).toBe(100);
+  expect(parseScore("Solid.\nFINAL SCORE: 88")).toBe(88);
+  expect(parseScore("**FINAL SCORE:** 88")).toBe(88);
+  expect(parseScore("FINAL SCORE: 88/100")).toBe(88);
+  expect(parseScore("clamps to 100\nFINAL SCORE: 250")).toBe(100);
   expect(parseScore("no score anywhere in this text")).toBeNull();
 });
 
-// Blocker #1 regression: the evaluator ends with "SCORE: <n>" THEN lists findings.
+// Design change: a bare, unlabelled-as-final "score:"/"Score:" is deliberately NOT
+// recognized anymore. Only the unique "FINAL SCORE:" marker counts — this is the
+// whole point of the fix (see the residual test below).
+test("parseScore returns null for a bare score label without the FINAL marker", () => {
+  expect(parseScore("## Score: 90")).toBeNull();
+  expect(parseScore("  score:  0  ")).toBeNull();
+});
+
+// Blocker #1 regression: the evaluator ends with "FINAL SCORE: <n>" THEN lists findings.
 // A prose mention of a score in a finding must not hijack the grade.
-test("parseScore requires a label so post-SCORE findings can't hijack the grade", () => {
-  expect(parseScore("SCORE: 88\n- The current score of 0 for edge cases is a problem")).toBe(88);
-  expect(parseScore("SCORE: 88\n- Aim for a score of 95 next round")).toBe(88);
+test("parseScore requires the FINAL SCORE label so post-verdict findings can't hijack the grade", () => {
+  expect(parseScore("FINAL SCORE: 88\n- The current score of 0 for edge cases is a problem")).toBe(88);
+  expect(parseScore("FINAL SCORE: 88\n- Aim for a score of 95 next round")).toBe(88);
+});
+
+// When a bare "score=" appears in the model's reasoning BEFORE the verdict (e.g.
+// describing what the code under test does), it must not hijack the grade — only
+// the unique FINAL SCORE marker is keyed on. This is the residual the old
+// first-match-wins parser left open.
+test("parseScore ignores a score mentioned in reasoning before the verdict (residual closed)", () => {
+  const text = "The code sets score = 40 internally.\nFINAL SCORE: 88\n- finding";
+  expect(parseScore(text)).toBe(88);
 });
 
 // When MULTIPLE genuinely-labelled scores appear (the verdict + a finding quoting
-// a labelled score from the code under test), the FIRST label — the verdict — wins.
-test("parseScore takes the verdict (first labelled score), not a labelled score quoted in a finding", () => {
-  expect(parseScore("SCORE: 88\n- the code sets score=0 which is wrong")).toBe(88);
-  expect(parseScore("SCORE: 91\n- found `score: 40` hardcoded in config.js")).toBe(91);
+// a labelled score from the code under test), only the FINAL SCORE marker wins —
+// a later plain "score:" in a finding is not treated as the grade at all.
+test("parseScore takes the FINAL SCORE verdict, not a labelled score quoted in a finding", () => {
+  expect(parseScore("FINAL SCORE: 88\n- the code sets score=0 which is wrong")).toBe(88);
+  expect(parseScore("FINAL SCORE: 91\n- found `score: 40` hardcoded in config.js")).toBe(91);
 });
 
 // C1 plumbing: the generator now receives the goal + sprint (tested property).
