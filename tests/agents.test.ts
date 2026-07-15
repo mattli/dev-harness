@@ -23,6 +23,17 @@ test("planner parses the title and sprint array", async () => {
   expect(plan.sprints[1].title).toBe("S2");
 });
 
+test("planRun caps sprints at 6 and reports the proposed count", async () => {
+  const eight = Array.from({ length: 8 }, (_, i) => ({ title: `s${i}`, description: "d" }));
+  const queryFn = async function* () {
+    yield { type: "assistant", message: { content: [{ type: "text", text: JSON.stringify({ title: "t", sprints: eight }) }] } };
+    yield { type: "result", subtype: "success", total_cost_usd: 0, usage: { input_tokens: 1, output_tokens: 1 } };
+  };
+  const res = await planRun({ queryFn: queryFn as any, model: "m", goal: "g" });
+  expect(res.sprints.length).toBe(6);
+  expect(res.proposedCount).toBe(8);
+});
+
 test("evaluator parses SCORE line (grades artifact diff vs contract)", async () => {
   const q = fakeStream("Solid.\nSCORE: 88");
   const r = await evaluateArtifact(

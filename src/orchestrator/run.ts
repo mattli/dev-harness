@@ -113,7 +113,8 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   };
 
   try {
-    traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: `${plan.sprints.length} sprints` });
+    const proposedCount = (plan as { proposedCount?: number }).proposedCount ?? plan.sprints.length;
+    traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: `${plan.sprints.length} sprints${proposedCount > plan.sprints.length ? ` (planner proposed ${proposedCount}, capped at ${plan.sprints.length})` : ""}` });
 
     for (const sprint of plan.sprints) {
       update({ currentSprint: sprint.id });
