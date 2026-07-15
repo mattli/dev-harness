@@ -15,7 +15,7 @@ const base = (over: Partial<RunState> = {}): RunState => ({
 test("dollar-ceiling summary names the limit and spend, and gives no advice", () => {
   const s = renderSummary(base());
   expect(s).toContain("csv-json-converter — 2026-07-08");
-  expect(s).toContain("Stopped early — hit the spending limit ($6.80)");
+  expect(s).toContain("Paused — hit the spending limit you set ($6.80)");
   expect(s).toContain("Progress: 3 of 4 stages finished");
   expect(s).toContain("scored 100, 98, 96 out of 100");
   expect(s).toContain("Spent:    $6.80");
@@ -38,6 +38,14 @@ test("describeOutcome maps each halt code to plain English", () => {
 
 test("an unknown halt code degrades gracefully instead of throwing", () => {
   expect(describeOutcome(base({ haltReason: "some-new-reason" }))).toBe("Stopped — some-new-reason");
+});
+
+test("a wall-clock halt reads as paused, not failed", () => {
+  expect(describeOutcome(base({ haltReason: "wall-clock" }))).toMatch(/paused/i);
+});
+
+test("a subscription usage-limit has its own plain-language line", () => {
+  expect(describeOutcome(base({ haltReason: "usage-limit" }))).toMatch(/subscription usage limit/i);
 });
 
 test("a run with no scores yet says so", () => {
