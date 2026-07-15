@@ -1,3 +1,5 @@
+import { BudgetHalt } from "../budget/tracker.js";
+
 export interface AgentResult { text: string; costUsd: number; tokens: number; toolCalls: string[]; }
 
 export type SDKMessage =
@@ -23,6 +25,18 @@ export interface InvokeOpts {
 
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** Best-effort detection of a subscription usage-limit / rate-limit signal from
+ *  the Agent SDK. NOTE: confirm against the real SDK error shape (see plan
+ *  caveat) — this matches plausible signals but is not boundary-verified. */
+export function isUsageLimitError(err: unknown): boolean {
+  if (!err) return false;
+  const anyErr = err as { status?: number; error?: { type?: string }; message?: string };
+  if (anyErr.status === 429) return true;
+  if (anyErr.error?.type === "rate_limit_error") return true;
+  const msg = (anyErr.message ?? String(err)).toLowerCase();
+  return /usage limit|rate limit|resets? at|429/.test(msg);
+}
+
 export async function invokeAgent(opts: InvokeOpts): Promise<AgentResult> {
   const maxRetries = opts.maxRetries ?? 3;
   const sleep = opts.sleep ?? realSleep;
@@ -31,6 +45,7 @@ export async function invokeAgent(opts: InvokeOpts): Promise<AgentResult> {
     try {
       return await runOnce(opts);
     } catch (err) {
+      if (isUsageLimitError(err)) throw new BudgetHalt("usage-limit"); // don't retry — halt gracefully
       lastErr = err;
       if (attempt < maxRetries) await sleep(attempt * 1000);
     }
@@ -46,7 +61,7 @@ async function runOnce(opts: InvokeOpts): Promise<AgentResult> {
   // Phase 1.5: a single hung agent call is still unguarded here. The orchestrator
   // enforces wall-clock/$ backstops BETWEEN agent calls (at DECIDE and at the top
   // of each negotiation round), but nothing interrupts one query() that stalls
-  // mid-stream. Add an AbortController + per-call deadline (config.caps.wallClockMs
+  // mid-stream. Add an AbortController + per-call deadline (config.caps.wallClockMsPerSprint
   // as an upper bound, or a dedicated per-call timeout) that aborts this loop.
   for await (const msg of opts.queryFn({
     prompt: opts.prompt,
