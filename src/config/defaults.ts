@@ -4,8 +4,8 @@ export const DEFAULTS = {
   caps: {
     maxIterationsPerSprint: 6,
     negotiationRounds: 5,
-    dollarCeiling: 10,
-    wallClockMs: 30 * 60 * 1000,
+    dollarCeiling: null,
+    wallClockMsPerSprint: 30 * 60 * 1000,
   },
   verifier: { kind: "test-suite" as const, command: "npm test" },
   worktreeRoot: ".dev-harness-worktrees",

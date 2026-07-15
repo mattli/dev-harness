@@ -30,16 +30,24 @@ npm run loop -- run --goal "Add sum.js exporting sum(a,b)=a+b with a passing nod
 - **State:** `runs/<runId>/state.json` — durable JSON state (survives crashes).
 - **Trace:** `runs/<runId>/trace.jsonl` — JSONL event log of every phase.
 
-## Hard stops (four caps)
+## Caps (checked between steps — approximate)
 
-The loop halts (status `halted`) if any of these are reached:
+Caps are checked *between* the loop's major steps, not mid-step, so a run can run
+a little past a cap before it halts (typically one step's worth). While you're
+watching a run, you're the real stop button. Hitting a cap is a **pause, not a
+failure** — the partial work is committed to the run branch and the transcript
+says what happened.
 
 | Cap | Default | Flag |
 |-----|---------|------|
-| Dollar ceiling | $10 | `--dollar-ceiling` |
+| Wall clock (per sprint) | 30 min | `--wall-clock-ms` |
 | Iterations per sprint | 6 | `--max-iterations` |
-| Wall clock | 30 min | `--wall-clock-ms` |
-| No-progress window | 2 sprints with delta < 5 pts | (thresholds config) |
+| Dollar ceiling | off (informational) | `--dollar-ceiling` (opt-in) |
+| No-progress window | 2 iterations with delta < 5 pts | (thresholds config) |
+| Subscription usage limit | graceful stop | (automatic) |
+
+On a subscription, the dollar figure is notional, so it's shown for information
+but does not halt a run unless you set `--dollar-ceiling`.
 
 ## v1 caveat — attended, no Docker
 

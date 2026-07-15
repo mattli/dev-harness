@@ -25,7 +25,7 @@ maybe("2+2 goal runs the full loop end to end for a few cents", async () => {
   const config = loadConfig({
     runId: "e2e", goal: "Add sum.js exporting sum(a,b)=a+b with a passing node:test",
     projectPath: project, worktreeRoot: join(project, ".wt"),
-    caps: { dollarCeiling: 1, maxIterationsPerSprint: 1, negotiationRounds: 2, wallClockMs: 3 * 60 * 1000 },
+    caps: { dollarCeiling: 1, maxIterationsPerSprint: 1, negotiationRounds: 2, wallClockMsPerSprint: 3 * 60 * 1000 },
     verifier: { command: "node --test" },
   });
   const state = await runLoop(config, wireDeps(config, query as any));

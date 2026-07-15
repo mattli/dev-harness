@@ -2,13 +2,16 @@ import type { RunState } from "../state/types.js";
 import { runBranch } from "../state/run-path.js";
 
 const HALT_TEXT: Record<string, string> = {
-  "dollar-ceiling": "Stopped early — hit the spending limit",
-  "wall-clock": "Stopped early — hit the time limit",
+  "wall-clock": "Paused — hit the per-sprint time limit (your work so far is saved)",
+  "dollar-ceiling": "Paused — hit the spending limit you set",
+  "usage-limit": "Paused — hit your Anthropic subscription usage limit (your work so far is saved)",
   "max-iteration": "Stopped — no improvement after the retry limit",
   "no-progress": "Stopped — the score stopped improving",
   "evaluator-parse-error": "Stopped — an internal grading error",
   "planner-error": "Stopped — could not plan the run (the planner returned unusable output)",
 };
+
+const APPROX_CAP_REASONS = new Set(["wall-clock", "dollar-ceiling", "usage-limit"]);
 
 /** One plain-English sentence describing how the run ended. No recommendations. */
 export function describeOutcome(state: RunState): string {
@@ -17,6 +20,7 @@ export function describeOutcome(state: RunState): string {
   const reason = state.haltReason ?? "unknown";
   const base = HALT_TEXT[reason] ?? `Stopped — ${reason}`;
   if (reason === "dollar-ceiling") return `${base} ($${state.budgetSpentUsd.toFixed(2)})`;
+  if (APPROX_CAP_REASONS.has(reason)) return `${base}. Caps are checked between steps, so a run can go a little past them.`;
   return base;
 }
 

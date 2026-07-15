@@ -113,11 +113,12 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   };
 
   try {
-    traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: `${plan.sprints.length} sprints` });
+    const proposedCount = (plan as { proposedCount?: number }).proposedCount ?? plan.sprints.length;
+    traceEvent({ phase: "PLAN", agentRole: "planner", outputDigest: `${plan.sprints.length} sprints${proposedCount > plan.sprints.length ? ` (planner proposed ${proposedCount}, capped at ${plan.sprints.length})` : ""}` });
 
     for (const sprint of plan.sprints) {
       update({ currentSprint: sprint.id });
-      budget.resetSprint();
+      budget.resetSprint(deps.nowMs());
 
       let contract: Contract;
       let freezeReason: FreezeReason;
@@ -188,6 +189,12 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
     update({ status: "passed", budgetSpentUsd: budget.spent });
     finalize(runDir, trace, state);
     return store.read();
+  } catch (e) {
+    // A BudgetHalt from ANY agent call (generate/evaluate/propose/critique) —
+    // most importantly a subscription usage-limit — halts gracefully: commit the
+    // partial work, mark halted, render. Non-BudgetHalt errors still throw.
+    if (e instanceof BudgetHalt) return await haltRun(e.reason);
+    throw e;
   } finally {
     await deps.removeWorktree(config.projectPath, wt.path); // branch survives for review
   }

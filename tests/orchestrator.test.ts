@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { runLoop, type LoopDeps } from "../src/orchestrator/run.js";
 import { loadConfig } from "../src/config/load.js";
 import { buildRunDir } from "../src/state/run-path.js";
+import { BudgetHalt } from "../src/budget/tracker.js";
 
 const cfg = (over = {}) => loadConfig({
   runId: "r1", goal: "g", projectPath: mkdtempSync(join(tmpdir(), "p-")),
@@ -170,9 +171,11 @@ test("halts on an unparseable evaluator score (error, never treated as 0)", asyn
 });
 
 test("halts mid-negotiation when a backstop trips before the first Opus call", async () => {
-  // startMs = first nowMs() call (0); every later call exceeds wallClockMs.
+  // The first few nowMs() calls are the run's startMs, the PLAN trace event's
+  // timestamp, and resetSprint's per-sprint baseline (all 0); only the checkStop
+  // call inside negotiate should see a clock past wallClockMsPerSprint.
   let calls = 0;
-  const nowMs = () => (calls++ === 0 ? 0 : 999999);
+  const nowMs = () => (calls++ < 3 ? 0 : 999999);
   let proposed = false;
   let generated = false;
   let removed = false;
@@ -183,10 +186,27 @@ test("halts mid-negotiation when a backstop trips before the first Opus call", a
     generateCode: async () => { generated = true; return { text: "", costUsd: 0, tokens: 0, toolCalls: [] }; },
     removeWorktree: async () => { removed = true; },
   };
-  const state = await runLoop(cfg({ caps: { wallClockMs: 1000 } }), deps);
+  const state = await runLoop(cfg({ caps: { wallClockMsPerSprint: 1000 } }), deps);
   expect(state.status).toBe("halted");
   expect(state.haltReason).toBe("wall-clock");
   expect(proposed).toBe(false); // aborted before any negotiation Opus call
   expect(generated).toBe(false);
   expect(removed).toBe(true); // graceful path: worktree removed in finally, branch survives
+});
+
+// A subscription usage-limit can be raised from ANY agent call, not just during
+// negotiation (which the inner try/catch already covered). The outer loop must
+// catch it too and halt gracefully — committing partial work rather than letting
+// the BudgetHalt reject runLoop's promise.
+test("a usage-limit thrown during generation halts gracefully with partial work committed", async () => {
+  let committed = false;
+  const deps = {
+    ...happyDeps(),
+    generateCode: async () => { throw new BudgetHalt("usage-limit"); },
+    commitWorktree: async () => { committed = true; return true; },
+  };
+  const state = await runLoop(cfg(), deps);
+  expect(state.status).toBe("halted");
+  expect(state.haltReason).toBe("usage-limit");
+  expect(committed).toBe(true);
 });
