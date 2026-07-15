@@ -34,7 +34,7 @@ export function isUsageLimitError(err: unknown): boolean {
   if (anyErr.status === 429) return true;
   if (anyErr.error?.type === "rate_limit_error") return true;
   const msg = (anyErr.message ?? String(err)).toLowerCase();
-  return /usage limit|rate limit|resets? at|429/.test(msg);
+  return /usage limit|rate limit/.test(msg);
 }
 
 export async function invokeAgent(opts: InvokeOpts): Promise<AgentResult> {

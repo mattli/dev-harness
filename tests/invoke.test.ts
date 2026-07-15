@@ -35,6 +35,12 @@ test("isUsageLimitError matches known usage-limit signals", () => {
   expect(isUsageLimitError(null)).toBe(false);
 });
 
+test("isUsageLimitError does not match benign 429-substrings or 'resets at' text", () => {
+  expect(isUsageLimitError(new Error("Error 4290"))).toBe(false);
+  expect(isUsageLimitError(new Error("job resets at midnight"))).toBe(false);
+  expect(isUsageLimitError(new Error("listening on port 4291"))).toBe(false);
+});
+
 test("invokeAgent halts (BudgetHalt) on a usage-limit WITHOUT retrying", async () => {
   let calls = 0;
   const queryFn = () => { calls++; throw new Error("Usage limit reached"); };
