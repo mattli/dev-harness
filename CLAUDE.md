@@ -19,6 +19,10 @@ branch survives for review," "the evaluator sees the artifact," "state is
 persisted"), write a test against the real thing, not a fake. If every test of a
 guarantee mocks the boundary the guarantee depends on, you've tested the mock.
 Worked examples: `docs/solutions/conventions/test-guarantees-at-their-boundary.md`.
+Related failure mode when harvesting a run's generated tests into a real repo: tests
+that key on `git HEAD` as "the original" (verbatim-move, diff-scope, golden-from-source)
+pass in-run but break once the sprint is committed and HEAD advances — pin the baseline
+or drop them. See `docs/solutions/conventions/harness-generated-tests-keyed-on-git-head.md`.
 
 ## Don't Parse Model Output by Position — Emit a Marker and Key on It
 When extracting a value from LLM output, have the model emit a guaranteed,
