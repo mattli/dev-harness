@@ -17,7 +17,7 @@ export interface LoopDeps {
   runsDir: string;
   planRun: (goal: string) => Promise<{ title: string; sprints: Sprint[] }>;
   proposeContract: (sprint: Sprint, prev: PriorRound | null, cwd: string) => Promise<Contract>;
-  critiqueContract: (sprint: Sprint, c: Contract) => Promise<{ agreed: boolean; contract: Contract; critique: string }>;
+  critiqueContract: (sprint: Sprint, c: Contract, cwd: string) => Promise<{ agreed: boolean; contract: Contract; critique: string }>;
   generateCode: (sprint: Sprint, c: Contract, cwd: string) => Promise<AgentResult>;
   runVerifier: (cwd: string) => Promise<VerifierResult>;
   worktreeDiff: (worktreePath: string) => Promise<string>;
@@ -125,7 +125,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
       try {
         const outcome = await negotiate({
           propose: (prev) => deps.proposeContract(sprint, prev, wt.path),
-          critique: (c) => deps.critiqueContract(sprint, c),
+          critique: (c) => deps.critiqueContract(sprint, c, wt.path),
           maxRounds: config.caps.negotiationRounds,
           // Enforce the wall-clock/$ backstops at the top of every negotiation
           // round, before the next pair of Opus calls — otherwise a long

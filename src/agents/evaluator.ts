@@ -45,11 +45,18 @@ export function parseScore(text: string): number | null {
   return Math.min(100, parseInt(m[1], 10));
 }
 
+/** The NEGOTIATE-phase critic is SIGHTED (it sees goal+sprint) and its job is to
+ *  judge whether the contract targets the REAL project code — so it runs in the
+ *  project worktree (`cwd`). This is the one evaluator role that gets a cwd; the
+ *  EVALUATE-phase scorer below deliberately does NOT (see its comment). Passing
+ *  the wrong cwd here is what poisoned an earlier run: the critic inspected the
+ *  harness's own repo, "saw" no target source, and froze an unsatisfiable
+ *  contract. Regression-pinned in tests/evaluator-cwd.test.ts. */
 export async function critiqueContract(
-  deps: EvaluatorDeps, sprint: Sprint, contract: Contract,
+  deps: EvaluatorDeps, sprint: Sprint, contract: Contract, cwd: string,
 ): Promise<{ agreed: boolean; contract: Contract; critique: string }> {
   const res = await invokeAgent({
-    queryFn: deps.queryFn, model: deps.model,
+    queryFn: deps.queryFn, model: deps.model, cwd,
     systemPrompt: loadPrompt("evaluator"),
     prompt: buildCritiquePrompt(deps.goal, sprint, contract),
   });
@@ -60,6 +67,13 @@ function parseAgreementYes(text: string): boolean {
   return /^AGREEMENT:\s*yes/im.test(text);
 }
 
+/** The EVALUATE-phase scorer is BLIND (C2) and grades ONLY the injected artifact
+ *  diff + deterministic verifier result. It is deliberately given NO cwd: with a
+ *  worktree cwd it could `git log` prior-sprint commit messages/scores or read
+ *  goal/spec files from disk (re-admitting the blind inputs out-of-band), and
+ *  could credit criteria satisfied by pre-existing worktree files OUTSIDE the
+ *  produced diff — a false pass. Withholding the cwd keeps the blindness the
+ *  signature promises. Do NOT thread a worktree cwd in here. */
 export async function evaluateArtifact(
   deps: EvaluatorDeps, contract: Contract, artifactDiff: string, verifier: VerifierResult,
 ): Promise<{ score: number | null; findings: string[] }> {

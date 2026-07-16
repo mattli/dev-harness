@@ -15,7 +15,7 @@ export function wireDeps(config: RunConfig, queryFn: QueryFn): LoopDeps {
     runsDir: "runs",
     planRun: (g) => planRun({ queryFn, model: config.models.planner, goal: g }),
     proposeContract: (sprint, prev, cwd) => proposeContract({ queryFn, model: config.models.generator, cwd, goal }, sprint, prev),
-    critiqueContract: (sprint, c) => critiqueContract({ queryFn, model: config.models.evaluator, goal }, sprint, c),
+    critiqueContract: (sprint, c, cwd) => critiqueContract({ queryFn, model: config.models.evaluator, goal }, sprint, c, cwd),
     generateCode: (sprint, c, cwd) => generateCode({ queryFn, model: config.models.generator, cwd, goal }, sprint, c),
     runVerifier: (cwd) => verifier.verify(cwd),
     worktreeDiff,
