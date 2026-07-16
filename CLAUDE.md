@@ -49,3 +49,14 @@ never assume the reader knows what "in/out", contract versions, or a run ID like
 `mrbb5z` mean. When adding fields to the trace or transcript, ask "would this read as
 gibberish to someone who's never seen the code?" — if so, label it or leave it out.
 Prefer named/dated run folders over opaque hashes for the same reason.
+
+## Provision the Verifier Env for What the Contract Imports, Not Just the Code
+A dev-harness run's verifier environment must contain every dependency the
+sprint's acceptance criteria require *importing* — not only what the module under
+test imports. "Minimal env" is a per-sprint call: a sprint that proves a
+re-export/interface against a production entrypoint inherits that entrypoint's
+whole import closure, so if the entrypoint eagerly imports heavy deps (LLM SDKs,
+Pipecat, web frameworks) the env needs them — or the proof must be restructured
+not to import it. Otherwise the suite dies at collection and the contract is
+unsatisfiable no matter how many iterations run. Worked example:
+docs/solutions/conventions/match-verifier-env-to-sprint-contract-imports.md.
