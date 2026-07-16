@@ -85,3 +85,15 @@ evaluator agent's cwd to its role, and encode the asymmetry in the signatures
 unwinnable contract — the first is the verifier env missing what the contract
 imports. Worked example:
 docs/solutions/conventions/evaluator-cwd-blind-scorer-sighted-critic.md.
+
+## Vault & Product Docs About dev-harness Lag the Code — Verify Caps Before Citing
+The plain-language explainer (`~/second-brain/areas/dev-harness/dev-harness-explainer.md`)
+and the coldmountain.ai dev-harness page describe the harness for non-coders, and
+they drift behind the code — most reliably on **caps and defaults**. This has bitten
+twice: both carried a "$10 hard cap / money halts the run" story long after the cap
+rework made the dollar ceiling **off-by-default and informational** (`dollarCeiling:
+null`), with the **per-sprint wall clock** as the real backstop and a **subscription
+usage-limit** as a first-class graceful pause. When asked whether one of these docs is
+accurate — or before quoting any cap/default/halt-reason from one — read
+`src/config/defaults.ts` and `src/budget/tracker.ts` (the `StopReason` list), not the
+doc and not memory. Treat the code as the source of truth; the prose is downstream.
