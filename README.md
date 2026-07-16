@@ -25,10 +25,13 @@ npm run loop -- run --goal "Add sum.js exporting sum(a,b)=a+b with a passing nod
 
 ### Where things land
 
+Artifacts land in a human-readable, dated run folder: `runs/<project>/<date>-<title>/`
+(e.g. `runs/my-app/2026-07-16-add-sum-js/`), with `-2`/`-3`… appended on collision.
+
 - **Branch:** `run/<slug>-<runId>` is left in your project repo after the run (never auto-merged — human merge gate).
-- **Transcript:** `runs/<runId>/transcript.md` — rendered markdown of every agent turn.
-- **State:** `runs/<runId>/state.json` — durable JSON state (survives crashes).
-- **Trace:** `runs/<runId>/trace.jsonl` — JSONL event log of every phase.
+- **Transcript:** `runs/<project>/<date>-<title>/transcript.md` — rendered markdown of every agent turn.
+- **State:** `runs/<project>/<date>-<title>/state.json` — durable JSON state (survives crashes).
+- **Trace:** `runs/<project>/<date>-<title>/trace.jsonl` — JSONL event log of every phase.
 
 ## Caps (checked between steps — approximate)
 
