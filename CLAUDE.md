@@ -3,6 +3,12 @@
 Durable engineering lessons from this project. These changed how the build goes;
 they're here so future work in this repo starts with them.
 
+New to the run loop? `CONCEPTS.md` (repo root) is a plain-language glossary of the
+domain vocabulary — run, sprint, contract, critic vs. scorer, blind boundary, etc.
+`docs/solutions/` holds worked examples of past problems, organized by category with
+YAML frontmatter (`module`, `tags`, `problem_type`) — relevant when working in an area
+one of these lessons touches.
+
 ## Test Guarantees at Their Real-I/O Boundary
 A guarantee that only holds at a real-I/O boundary — real git, real filesystem,
 real network/SDK — needs at least one test that exercises that boundary. Fakes
@@ -60,3 +66,18 @@ Pipecat, web frameworks) the env needs them — or the proof must be restructure
 not to import it. Otherwise the suite dies at collection and the contract is
 unsatisfiable no matter how many iterations run. Worked example:
 docs/solutions/conventions/match-verifier-env-to-sprint-contract-imports.md.
+
+## A Contract Is Only as Sound as the Repo the Critic Inspected
+The dev-harness evaluator has two roles with OPPOSITE information rules. The
+NEGOTIATE critic is sighted — it must run in the project worktree, because it
+judges whether the contract targets real code. The EVALUATE scorer is blind — it
+must get NO worktree cwd, because it grades only the injected diff + verifier
+result; a worktree cwd would leak commit messages/goal files and let it pass a
+sprint on code outside the produced diff. Wiring both evaluator agents to run in
+the harness's own dir let the critic "see" a repo with no target file and freeze
+an unsatisfiable "source absent" contract (a run that can only no-op). Match each
+evaluator agent's cwd to its role, and encode the asymmetry in the signatures
+(critic takes a cwd; scorer cannot). This is the SECOND distinct cause of an
+unwinnable contract — the first is the verifier env missing what the contract
+imports. Worked example:
+docs/solutions/conventions/evaluator-cwd-blind-scorer-sighted-critic.md.
