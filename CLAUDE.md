@@ -23,6 +23,14 @@ Related failure mode when harvesting a run's generated tests into a real repo: t
 that key on `git HEAD` as "the original" (verbatim-move, diff-scope, golden-from-source)
 pass in-run but break once the sprint is committed and HEAD advances — pin the baseline
 or drop them. See `docs/solutions/conventions/harness-generated-tests-keyed-on-git-head.md`.
+A second harvest failure mode, same family (harvest-time assumptions expire): harvested
+tests inherit harvest-time *hermeticity*. Integrating them onto an evolved codebase can
+silently make them hit the network/LLM — the code under test changed, not the test.
+Re-verify by grepping the exercised production paths for client/network/LLM construction
+(`anthropic.`, `.messages.create`, `requests`, etc.) and stub what you find; don't assume
+the run's clone offline-ness carried over, and treat green-only-because-a-key-is-unset as
+a hermeticity failure, not a pass. See
+`docs/solutions/conventions/harvested-tests-can-be-non-hermetic.md`.
 
 ## Don't Parse Model Output by Position — Emit a Marker and Key on It
 When extracting a value from LLM output, have the model emit a guaranteed,
