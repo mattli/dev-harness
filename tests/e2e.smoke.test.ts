@@ -34,9 +34,9 @@ maybe("2+2 goal runs the full loop end to end for a few cents", async () => {
   // (a) C1: the on-goal artifact is actually committed on the surviving branch —
   // not just present in a discarded working tree. Find the run branch, and assert
   // some committed file references "sum" and implements a + b.
-  const branchList = await execa("git", ["-C", project, "branch", "--list", "run/*"], { reject: false });
+  const branchList = await execa("git", ["-C", project, "branch", "--list", "run-*"], { reject: false });
   const branch = branchList.stdout.split("\n")[0].replace(/^\*?\s*/, "").trim();
-  expect(branch).toMatch(/^run\//);
+  expect(branch).toMatch(/^run-/);
   const tree = await execa("git", ["-C", project, "ls-tree", "-r", "--name-only", branch], { reject: false });
   const files = tree.stdout.split("\n").filter(Boolean);
   let onGoal = false;

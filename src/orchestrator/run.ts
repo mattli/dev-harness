@@ -55,7 +55,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
   const store = new StateStore(join(runDir, "state.json"));
   const trace = new TraceWriter(join(runDir, "trace.jsonl"));
   const budget = new BudgetTracker(config.caps, config.thresholds, startMs);
-  const branch = runBranch(config.goal, config.runId);
+  const branch = runBranch(config.runId);
 
   const state: RunState = {
     runId: config.runId, goal: config.goal, title: plan.title, startedAt, runDir, status: "running",

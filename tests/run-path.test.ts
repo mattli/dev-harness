@@ -34,7 +34,7 @@ test("buildRunDir falls back to 'run' when the title slugifies to empty", () => 
 });
 
 test("runBranch composes the shared run-<runId> name", () => {
-  expect(runBranch("Build a CSV converter", "abc")).toBe("run-abc");
+  expect(runBranch("abc")).toBe("run-abc");
 });
 
 test("reserveRunDir creates the dir and hands a second reservation a distinct path", () => {

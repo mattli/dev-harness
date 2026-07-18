@@ -39,7 +39,7 @@ export function renderSummary(state: RunState): string {
     `Progress: ${finished} of ${total} stages finished`,
     `Quality:  ${quality}`,
     `Spent:    $${state.budgetSpentUsd.toFixed(2)}`,
-    `Code:     branch ${runBranch(state.goal, state.runId)} in ${state.projectPath ?? "(unknown project path)"}`,
+    `Code:     branch ${runBranch(state.runId)} in ${state.projectPath ?? "(unknown project path)"}`,
     `Records:  ${state.runDir ?? "(unknown)"}`,
     "",
   ].join("\n");
