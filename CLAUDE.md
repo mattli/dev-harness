@@ -66,6 +66,13 @@ Fix Is Unreviewed Code"), arrange an independent review (e.g. /code-review) and
 translate the findings into plain language and a recommendation, rather than
 handing him the diff.
 
+This extends past code to *operational* answers — git branches, backups, file
+layout, infrastructure. Lead with the plain outcome ("your run records save into
+your vault and back up automatically") and stop; don't narrate the mechanism
+(branches, symlinks, ignore rules, flags) unless he asks how it works. If Matt
+says he's confused, that's the tell you've slipped into implementation altitude —
+restate the outcome in one plain sentence and cut the rest, don't add more detail.
+
 ## The Run Transcript Is a Product Surface, Not a Debug Log
 The transcript/summary a run produces is the primary thing Matt reads to understand
 what happened — often over SSH, in raw form, with no code context. It must be legible
