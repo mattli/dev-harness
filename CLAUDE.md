@@ -40,7 +40,14 @@ heuristically select among candidate matches by position (first / last /
 nearest). Positional selection is fragile: the same value legitimately appears
 elsewhere (in reasoning before the verdict, in findings after it), and every
 position rule is wrong for some layout. Regex-scanning free text for "the number
-that's probably the answer" is a recurring bug source.
+that's probably the answer" is a recurring bug source. This bit again when the
+planner/generator sliced a contract's JSON from the first `{` to the last `}`: a
+brace-heavy goal made the model write a stray `{` in preamble prose and the run
+crashed at negotiation (`Expected property name or '}' at position 1`). Extract by
+a fenced-block marker + shape validation instead — and note that the *first* version
+of that fix was itself buggy (quote-desync, echoed-schema grab) and only an
+independent review caught it. Worked example:
+`docs/solutions/conventions/extract-model-json-by-marker-not-position.md`.
 
 ## A Fix Is Unreviewed Code
 A fix is new code and can introduce new bugs, so its risk scales with what it

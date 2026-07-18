@@ -1,5 +1,6 @@
 import { invokeAgent, type AgentResult, type QueryFn } from "./invoke.js";
 import { loadPrompt } from "./prompts.js";
+import { extractJsonObject } from "./extract-json.js";
 import type { Contract } from "../contract/types.js";
 import type { PriorRound } from "../contract/negotiate.js";
 import type { Sprint } from "../state/types.js";
@@ -14,7 +15,7 @@ export function buildProposePrompt(goal: string, sprint: Sprint, prev: PriorRoun
     prev
       ? `Your prior contract (v${prev.contract.version}):\n${JSON.stringify(prev.contract, null, 2)}\n\nThe evaluator's critique of it:\n${prev.critique}\n\nRevise the contract to address the critique.`
       : `Propose a contract for THIS sprint: granular, testable criteria, each with how it will be verified.`,
-    `Output ONLY JSON: {"criteria":[{"id":"c1","description":"...","verifyBy":"..."}]}`,
+    'Output the contract as a single fenced ```json code block and nothing else:\n```json\n{"criteria":[{"id":"c1","description":"...","verifyBy":"..."}]}\n```',
   ].join("\n\n");
 }
 
@@ -32,8 +33,28 @@ export async function proposeContract(deps: GeneratorDeps, sprint: Sprint, prev:
     systemPrompt: loadPrompt("generator"),
     prompt: buildProposePrompt(deps.goal, sprint, prev),
   });
-  const json = res.text.slice(res.text.indexOf("{"), res.text.lastIndexOf("}") + 1);
-  const parsed = JSON.parse(json) as { criteria: Contract["criteria"] };
+  // Key on the object's shape (a non-empty, well-typed `criteria` array), not
+  // the first `{` in the reply — a stray brace in brace-heavy preamble prose
+  // used to crash this. Requiring non-empty + typed criteria rejects a vacuous
+  // `{"criteria":[]}` (which would freeze an unsatisfiable no-op contract).
+  const parsed = extractJsonObject(
+    res.text,
+    (o): o is { criteria: Contract["criteria"] } => {
+      const crit = (o as { criteria?: unknown } | null)?.criteria;
+      return (
+        Array.isArray(crit) &&
+        crit.length > 0 &&
+        crit.every(
+          (c) =>
+            c != null &&
+            typeof c === "object" &&
+            typeof (c as { id?: unknown }).id === "string" &&
+            typeof (c as { description?: unknown }).description === "string" &&
+            typeof (c as { verifyBy?: unknown }).verifyBy === "string",
+        )
+      );
+    },
+  );
   return { version: (prev?.contract.version ?? 0) + 1, criteria: parsed.criteria, frozen: false };
 }
 
