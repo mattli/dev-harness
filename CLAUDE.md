@@ -58,6 +58,13 @@ or comment-only change does not. The lesson isn't "review every fix"; it's "the
 fixes that touch how things work, especially late close-out fixes that bypassed
 normal review, are where self-approval bites."
 
+## Commit Before a Workflow-Backed Code Review
+The workflow-backed /code-review spawns subagents that check out branches inside the
+working repo, and can leave you parked on a different branch (or risk clobbering
+uncommitted work). Commit before launching a review, and re-check git branch/status
+after. (Observed twice, 2026-07-18, dev-harness. Living here for now; promote to the
+shared dotfiles CLAUDE.md if it shows up outside this repo.)
+
 ## Matt Owns the Product Here, Not the Code
 Matt directs this project but does not read the implementation. Explain changes
 at a product-manager altitude — what it does and why it matters, not how the code
@@ -107,6 +114,21 @@ evaluator agent's cwd to its role, and encode the asymmetry in the signatures
 unwinnable contract — the first is the verifier env missing what the contract
 imports. Worked example:
 docs/solutions/conventions/evaluator-cwd-blind-scorer-sighted-critic.md.
+
+## When a Run Grades Plainly-Correct Work Near-Zero, Suspect the Contract (Cause #3, fix OPEN)
+A frozen criterion that closes the change to an exact file set/count ("only these N
+files", "no files other than …") contradicts a "tests pass" criterion — a change's
+file set isn't knowable up front (a rename fans out to every test that hard-codes the
+old value). The blind scorer then fails correct, verifier-passing work for touching a
+"forbidden" file; self-run mrqghymn graded correct code 3/0/4 this way. Diagnostic:
+when a run scores plainly-correct work near-zero, re-run the verifier on the run
+branch — if it's green, the score measured an unsatisfiable CONTRACT, not the code
+(the verifier is the trustworthy signal; overrule the grade with cause). Third
+distinct unwinnable-contract cause (after verifier-env and evaluator-cwd). FIX
+UNDECIDED as of 2026-07-18 — two attempts failed review; durable sub-lesson: you
+can't soundly classify a free-text criterion in code (over/under-matches), only the
+sighted critic can. See backlog + branches archive/fix-satisfiable-contracts-2026-07-18,
+fix/satisfiable-contracts-prompts.
 
 ## Vault & Product Docs About dev-harness Lag the Code — Verify Caps Before Citing
 The plain-language explainer (`~/second-brain/areas/dev-harness/dev-harness-explainer.md`)
