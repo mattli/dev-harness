@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { planRun } from "../src/agents/planner.js";
 import { evaluateArtifact, parseScore, buildEvaluatePrompt, buildCritiquePrompt } from "../src/agents/evaluator.js";
-import { buildProposePrompt, buildGeneratePrompt } from "../src/agents/generator.js";
+import { buildProposePrompt, buildGeneratePrompt, proposeContract } from "../src/agents/generator.js";
 import type { QueryFn } from "../src/agents/invoke.js";
 import type { Sprint } from "../src/state/types.js";
 import type { Contract } from "../src/contract/types.js";
@@ -85,6 +85,61 @@ test("parseScore ignores a score mentioned in reasoning before the verdict (resi
 test("parseScore takes the FINAL SCORE verdict, not a labelled score quoted in a finding", () => {
   expect(parseScore("FINAL SCORE: 88\n- the code sets score=0 which is wrong")).toBe(88);
   expect(parseScore("FINAL SCORE: 91\n- found `score: 40` hardcoded in config.js")).toBe(91);
+});
+
+// Regression (root cause of run mrpk71c5's crash): the contract/plan extractors
+// grabbed everything from the first `{` to the last `}` in the model's reply.
+// When the task discusses code with braces (Python dicts, f-strings like
+// f"{x}", build_system_instruction), the model writes a stray `{` in its
+// preamble prose and the slice starts there -> JSON.parse dies with
+// "Expected property name or '}' at position 1". Feed the extractor exactly
+// that brace-heavy preamble so it can never silently regress.
+const BRACE_HEAVY_PREAMBLE =
+  "I'll relocate the pure helpers. Note `_load_index()` returns a dict like " +
+  "{key: value} and build_system_instruction uses f-strings such as f\"{name}\". " +
+  "Here is the contract:\n";
+
+test("proposeContract survives a brace-heavy preamble before the JSON (mrpk71c5 regression)", async () => {
+  const contractJson = '{"criteria":[{"id":"c1","description":"move helpers","verifyBy":"pytest"}]}';
+  const q = fakeStream(BRACE_HEAVY_PREAMBLE + contractJson);
+  const c = await proposeContract({ queryFn: q, model: "m", cwd: ".", goal: "g" }, sprint, null);
+  expect(c.criteria).toHaveLength(1);
+  expect(c.criteria[0].id).toBe("c1");
+  expect(c.criteria[0].verifyBy).toBe("pytest");
+});
+
+test("proposeContract extracts a fenced ```json contract block", async () => {
+  const q = fakeStream("Here is the contract:\n```json\n{\"criteria\":[{\"id\":\"c1\",\"description\":\"d\",\"verifyBy\":\"v\"}]}\n```");
+  const c = await proposeContract({ queryFn: q, model: "m", cwd: ".", goal: "g" }, sprint, null);
+  expect(c.criteria[0].id).toBe("c1");
+});
+
+test("planRun survives a brace-heavy preamble before the JSON (same root cause)", async () => {
+  const planJson = '{"title":"t","sprints":[{"title":"S1","description":"d"}]}';
+  const q = fakeStream("The module returns {key: val} and uses f\"{x}\". Plan:\n" + planJson);
+  const plan = await planRun({ queryFn: q, model: "m", goal: "g" });
+  expect(plan.title).toBe("t");
+  expect(plan.sprints).toHaveLength(1);
+});
+
+test("proposeContract rejects a vacuous empty-criteria contract", async () => {
+  const q = fakeStream('Here you go:\n```json\n{"criteria":[]}\n```');
+  await expect(proposeContract({ queryFn: q, model: "m", cwd: ".", goal: "g" }, sprint, null)).rejects.toThrow();
+});
+
+test("proposeContract takes the fenced contract, not an echoed one in preamble prose", async () => {
+  const echo = '{"criteria":[{"id":"echo","description":"d","verifyBy":"v"}]}';
+  const real = '{"criteria":[{"id":"real","description":"d","verifyBy":"v"}]}';
+  const q = fakeStream(`Following the shape ${echo}, here is my contract:\n\`\`\`json\n${real}\n\`\`\``);
+  const c = await proposeContract({ queryFn: q, model: "m", cwd: ".", goal: "g" }, sprint, null);
+  expect(c.criteria[0].id).toBe("real");
+});
+
+test("planRun takes the fenced plan despite a stray quote in preamble (quote-desync + fence)", async () => {
+  const q = fakeStream('The value is 5" wide.\n```json\n{"title":"t","sprints":[{"title":"S1","description":"d"}]}\n```');
+  const plan = await planRun({ queryFn: q, model: "m", goal: "g" });
+  expect(plan.title).toBe("t");
+  expect(plan.sprints).toHaveLength(1);
 });
 
 // C1 plumbing: the generator now receives the goal + sprint (tested property).

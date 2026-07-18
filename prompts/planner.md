@@ -5,9 +5,12 @@ planning error at this level cascades through every sprint.
 Also produce a short `title`: 3–4 words, lowercase, describing the goal (it names
 the run's folder, e.g. "csv json converter").
 
-Output ONLY a JSON object of the form:
+Output ONLY a single fenced ```json code block of the form:
+```json
 {"title": "...", "sprints": [{"title": "...", "description": "..."}]}
-3–6 sprints. No prose outside the JSON.
+```
+3–6 sprints. Emit the code block exactly once, with your real plan — do not
+restate this schema. No prose outside the code block.
 
 Each sprint must be a VERTICAL SLICE that delivers working, TESTED behavior —
 some functionality plus the tests that prove it. Do NOT schedule "write the
