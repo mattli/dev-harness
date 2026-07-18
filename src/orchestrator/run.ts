@@ -59,6 +59,7 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
 
   const state: RunState = {
     runId: config.runId, goal: config.goal, title: plan.title, startedAt, runDir, status: "running",
+    projectPath: config.projectPath,
     sprints: plan.sprints, currentSprint: 0, contractVersion: 0, scores: [], iterations: 0,
     budgetSpentUsd: 0, haltReason: null, contractFreezeReason: null,
   };

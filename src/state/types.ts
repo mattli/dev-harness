@@ -10,6 +10,10 @@ export interface RunState {
   /** Where this run's artifacts live (runs/<project>/<date>-<title>/). Optional
    *  because runs written before this field existed won't carry it. */
   runDir?: string;
+  /** The target project's absolute path (from config.projectPath). Optional,
+   *  mirroring runDir, because runs written before this field existed won't
+   *  carry it. */
+  projectPath?: string;
   /** Why the current/most-recent contract froze — a snapshot mirroring
    *  contractVersion. Per-sprint history lives in the trace; this is the
    *  single-point state view. Null before the first contract freezes. */

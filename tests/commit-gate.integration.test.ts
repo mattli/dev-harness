@@ -51,7 +51,7 @@ test("passing sprint commits the generated file to the run branch, and it surviv
   );
 
   expect(state.status).toBe("passed");
-  const branch = "run/add-sum-cg1";
+  const branch = "run-cg1";
   // Branch has a commit beyond init (non-empty), tagged with the passing score...
   const log = await execa("git", ["-C", project, "log", branch, "--oneline"], { reject: false });
   expect(log.stdout).toMatch(/passed \(score 90\)/);
@@ -79,7 +79,7 @@ test("halted sprint still commits partial generated work to the run branch", asy
 
   expect(state.status).toBe("halted");
   expect(state.haltReason).toBe("max-iteration");
-  const branch = "run/add-sum-cg2";
+  const branch = "run-cg2";
   // Rejected work is still on the branch for review (commit is for review, not endorsement).
   const show = await execa("git", ["-C", project, "show", `${branch}:sum.js`], { reject: false });
   expect(show.exitCode).toBe(0);

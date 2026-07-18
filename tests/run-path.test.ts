@@ -33,8 +33,8 @@ test("buildRunDir falls back to 'run' when the title slugifies to empty", () => 
     .toBe("runs/csv-tool/1970-01-01-run");
 });
 
-test("runBranch composes the shared run/<slug>-<runId> name", () => {
-  expect(runBranch("Build a CSV converter", "abc")).toBe("run/build-a-csv-converter-abc");
+test("runBranch composes the shared run-<runId> name", () => {
+  expect(runBranch("Build a CSV converter", "abc")).toBe("run-abc");
 });
 
 test("reserveRunDir creates the dir and hands a second reservation a distinct path", () => {

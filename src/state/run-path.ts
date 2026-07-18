@@ -5,7 +5,7 @@ import { slugify } from "../workspace/worktree.js";
 /** The run branch name. Single source shared by the orchestrator (which creates
  *  the branch) and the summary (which reports it) so the two can never drift. */
 export function runBranch(goal: string, runId: string): string {
-  return `run/${slugify(goal)}-${runId}`;
+  return `run-${runId}`;
 }
 
 /** Human-readable project slug from the --project path (its folder name). */
