@@ -30,12 +30,21 @@ function scoreOf(events: TraceEvent[]): number | null {
 }
 
 function criteriaLines(events: TraceEvent[]): string[] {
-  // Guard the array: the renderer parses trace.jsonl back from disk, so a
+  // Guard the arrays: the renderer parses trace.jsonl back from disk, so a
   // format-skewed or hand-edited line must degrade to no section, not throw.
   const neg = events.find((e) => e.phase === "NEGOTIATE" && e.contract);
   const criteria = neg?.contract?.criteria ?? [];
-  if (!criteria.length) return [];
-  return ["  Requirements:", ...criteria.map((c) => `    - ${oneLine(c.description)}`)];
+  // Scope is shown to the human reader (it's what the change was meant to stay
+  // within) even though the blind scorer never grades it — the transcript is a
+  // product surface, not the grader's input.
+  const scope = neg?.contract?.scope ?? [];
+  const reqLines = criteria.length
+    ? ["  Requirements:", ...criteria.map((c) => `    - ${oneLine(c.description)}`)]
+    : [];
+  const scopeLines = scope.length
+    ? ["  Scope (not graded — enforced at review):", ...scope.map((s) => `    - ${oneLine(s.description)}`)]
+    : [];
+  return [...reqLines, ...scopeLines];
 }
 
 // A stage is "done" (completed), "stopped" (the stage the run died on), or

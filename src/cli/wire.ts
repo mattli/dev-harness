@@ -19,7 +19,7 @@ export function wireDeps(config: RunConfig, queryFn: QueryFn): LoopDeps {
     generateCode: (sprint, c, cwd) => generateCode({ queryFn, model: config.models.generator, cwd, goal }, sprint, c),
     runVerifier: (cwd) => verifier.verify(cwd),
     worktreeDiff,
-    evaluateArtifact: (c, diff, v) => evaluateArtifact({ queryFn, model: config.models.evaluator, goal }, c, diff, v),
+    evaluateArtifact: (view, diff, v) => evaluateArtifact({ queryFn, model: config.models.evaluator, goal }, view, diff, v),
     createWorktree,
     commitWorktree,
     removeWorktree,

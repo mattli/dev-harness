@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { parseAgreement, negotiate } from "../src/contract/negotiate.js";
 import type { Contract } from "../src/contract/types.js";
 
-const c = (version: number): Contract => ({ version, criteria: [], frozen: false });
+const c = (version: number): Contract => ({ version, criteria: [], scope: [], frozen: false });
 
 test("parseAgreement reads the sentinel", () => {
   expect(parseAgreement("looks good\nAGREEMENT: yes")).toBe(true);

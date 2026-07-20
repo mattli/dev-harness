@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { evaluateArtifact } from "../src/agents/evaluator.js";
-import type { Contract } from "../src/contract/types.js";
+import { toGraderView, type Contract } from "../src/contract/types.js";
 
 // Gated real-evaluator test (C2, joint E2E assertion b): proves the evaluator
 // DISCRIMINATES on the artifact, not the verifier boolean. Both artifacts pass
@@ -12,6 +12,7 @@ const maybe = process.env.RUN_E2E === "1" ? test : test.skip;
 const onGoalContract: Contract = {
   version: 1,
   frozen: true,
+  scope: [],
   criteria: [
     { id: "c1", description: "A file sum.js exports a function sum(a, b) that returns a + b", verifyBy: "node:test asserts sum(2, 3) === 5" },
     { id: "c2", description: "sum handles negative and zero inputs", verifyBy: "node:test asserts sum(-1, 1) === 0" },
@@ -44,8 +45,8 @@ maybe("evaluator scores on-goal high and off-goal low against the same contract"
   const deps = { queryFn: query as any, model: "claude-opus-4-8", goal: "unused-in-evaluate" };
   const verifierPassed = { passed: true, findings: [] };
 
-  const on = await evaluateArtifact(deps, onGoalContract, onGoalDiff, verifierPassed);
-  const off = await evaluateArtifact(deps, onGoalContract, offGoalDiff, verifierPassed);
+  const on = await evaluateArtifact(deps, toGraderView(onGoalContract), onGoalDiff, verifierPassed);
+  const off = await evaluateArtifact(deps, toGraderView(onGoalContract), offGoalDiff, verifierPassed);
 
   expect(on.score).not.toBeNull();
   expect(off.score).not.toBeNull();

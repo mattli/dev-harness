@@ -115,7 +115,7 @@ unwinnable contract — the first is the verifier env missing what the contract
 imports. Worked example:
 docs/solutions/conventions/evaluator-cwd-blind-scorer-sighted-critic.md.
 
-## When a Run Grades Plainly-Correct Work Near-Zero, Suspect the Contract (Cause #3, fix OPEN)
+## When a Run Grades Plainly-Correct Work Near-Zero, Suspect the Contract (Cause #3)
 A frozen criterion that closes the change to an exact file set/count ("only these N
 files", "no files other than …") contradicts a "tests pass" criterion — a change's
 file set isn't knowable up front (a rename fans out to every test that hard-codes the
@@ -124,11 +124,23 @@ old value). The blind scorer then fails correct, verifier-passing work for touch
 when a run scores plainly-correct work near-zero, re-run the verifier on the run
 branch — if it's green, the score measured an unsatisfiable CONTRACT, not the code
 (the verifier is the trustworthy signal; overrule the grade with cause). Third
-distinct unwinnable-contract cause (after verifier-env and evaluator-cwd). FIX
-UNDECIDED as of 2026-07-18 — two attempts failed review; durable sub-lesson: you
-can't soundly classify a free-text criterion in code (over/under-matches), only the
-sighted critic can. See backlog + branches archive/fix-satisfiable-contracts-2026-07-18,
-fix/satisfiable-contracts-prompts.
+distinct unwinnable-contract cause (after verifier-env and evaluator-cwd).
+FIX (2026-07-20, structural scope-split): a contract now has two parts — `criteria`
+(behavioral acceptance, graded) and `scope` (intent-level restrictions, NOT graded).
+The blind scorer receives a `GraderView` (`{version, criteria, scope?: never}`)
+projected by `toGraderView` at the evaluate call, so a scope/file-set restriction
+structurally cannot reach the grader on ANY freeze path — including the round-cap
+force-freeze trapdoor. Scope is enforced by the sighted critic + verifier + human
+merge gate instead. The `scope?: never` brand is load-bearing: without it a
+`Contract` (a structural superset) is still assignable to `GraderView`, so the
+guarantee is only single-call-site discipline — the first cut shipped that hole and
+independent review caught it. With the brand, passing a `Contract` to the grader is a
+compile error, pinned by a `@ts-expect-error` that makes `tsc` fail if the brand is
+dropped. The type split is the guarantee (compile-enforced); the prompts that route
+restrictions into `scope` are not — routing a free-text restriction is a semantic
+call only the sighted critic can make (why the two prior code/prompt attempts
+failed). Worked example:
+`docs/solutions/conventions/contract-scope-split-blind-grader.md`.
 
 ## Vault & Product Docs About dev-harness Lag the Code — Verify Caps Before Citing
 The plain-language explainer (`~/second-brain/areas/dev-harness/dev-harness-explainer.md`)
