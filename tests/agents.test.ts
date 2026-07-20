@@ -4,7 +4,7 @@ import { evaluateArtifact, parseScore, buildEvaluatePrompt, buildCritiquePrompt 
 import { buildProposePrompt, buildGeneratePrompt, proposeContract } from "../src/agents/generator.js";
 import type { QueryFn } from "../src/agents/invoke.js";
 import type { Sprint } from "../src/state/types.js";
-import type { Contract } from "../src/contract/types.js";
+import { toGraderView, type Contract } from "../src/contract/types.js";
 
 const fakeStream = (text: string): QueryFn => async function* () {
   yield { type: "assistant", message: { content: [{ type: "text", text }] } } as any;
@@ -38,7 +38,7 @@ test("evaluator parses FINAL SCORE line (grades artifact diff vs contract)", asy
   const q = fakeStream("Solid.\nFINAL SCORE: 88");
   const r = await evaluateArtifact(
     { queryFn: q, model: "m", goal: "g" },
-    contract,
+    toGraderView(contract),
     "diff --git a/sum.js b/sum.js\n+module.exports.sum = (a,b)=>a+b;",
     { passed: true, findings: [] },
   );
@@ -167,14 +167,14 @@ test("critique prompt contains the goal + sprint so it can reject an off-goal co
 // on the model obeying the prompt.
 test("evaluate prompt contains the artifact diff (C2)", () => {
   const diff = "diff --git a/sum.js b/sum.js\n+module.exports.sum = (a,b)=>a+b;";
-  const p = buildEvaluatePrompt(contract, diff, { passed: true, findings: [] });
+  const p = buildEvaluatePrompt(toGraderView(contract), diff, { passed: true, findings: [] });
   expect(p).toContain(diff);
   expect(p).toContain("sum works"); // the contract it grades against
 });
 
 test("evaluate prompt EXCLUDES transcript, commit messages, and goal/sprint (C2 boundary)", () => {
   const diff = "diff --git a/sum.js b/sum.js\n+ok";
-  const p = buildEvaluatePrompt(contract, diff, { passed: true, findings: [] });
+  const p = buildEvaluatePrompt(toGraderView(contract), diff, { passed: true, findings: [] });
   // These are deliberately not parameters of buildEvaluatePrompt; assert they
   // cannot appear even if a caller mistakenly tried to smuggle them via the diff.
   const GENERATOR_TRANSCRIPT = "I chose this approach because it is elegant";

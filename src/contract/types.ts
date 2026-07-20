@@ -19,14 +19,18 @@ export interface Contract { version: number; criteria: Criterion[]; scope: Scope
  *  without agreement (the one bypass of the adversarial gate — deserves scrutiny). */
 export type FreezeReason = "agreement" | "round-cap";
 
-/** The projection of a frozen contract that the BLIND scorer receives. It has NO
- *  `scope` field by construction, so scope cannot reach the grader regardless of
- *  how the contract froze — including the round-cap force-freeze trapdoor, which
- *  is downstream of this boundary. `toGraderView` is the ONLY way to build one,
- *  and it drops scope; the grader's signature takes this type, not `Contract`,
- *  so passing scope to the grader is a compile error, not a discipline the model
- *  or a prompt must uphold. This is the guarantee; the prompts are not. */
-export interface GraderView { version: number; criteria: Criterion[]; }
+/** The projection of a frozen contract that the BLIND scorer receives. It carries
+ *  version + acceptance criteria and, by the `scope?: never` brand, is NOT
+ *  assignable from a `Contract` (whose `scope: ScopeConstraint[]` is incompatible
+ *  with `never`). Without the brand a `Contract` would structurally satisfy this
+ *  shape — it is a superset — and a future caller could pass a scope-bearing
+ *  contract straight into the grader; the brand makes that a COMPILE ERROR, so the
+ *  guarantee is the type system, not single-call-site discipline. `toGraderView`
+ *  is the only constructor, and it omits `scope` entirely. Regression-pinned by a
+ *  `@ts-expect-error` in tests/contract-scope-split.test.ts: if the brand is
+ *  dropped, that directive goes unused and `tsc --noEmit` fails. This is the
+ *  guarantee; the prompts are not. */
+export interface GraderView { version: number; criteria: Criterion[]; scope?: never; }
 
 export function toGraderView(c: Contract): GraderView {
   return { version: c.version, criteria: c.criteria };
