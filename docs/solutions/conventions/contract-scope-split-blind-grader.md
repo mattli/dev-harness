@@ -49,11 +49,22 @@ home from the grader by construction.
   module X") with **no `verifyBy`** — because scope is a necessity judgment, not a
   deterministically-gradable criterion.
 - **The grader receives a projection with no scope field.**
-  `GraderView { version, criteria }` and `toGraderView(contract)` is its only
-  constructor; it drops `scope`. `buildEvaluatePrompt` / `evaluateArtifact` take a
-  `GraderView`, **not** a `Contract` — so passing scope to the blind scorer is a
-  **compile error**, not a discipline. The orchestrator projects at the single
+  `GraderView { version, criteria, scope?: never }` and `toGraderView(contract)` is
+  its only constructor; it drops `scope`. `buildEvaluatePrompt` / `evaluateArtifact`
+  take a `GraderView`, **not** a `Contract`. The orchestrator projects at the single
   evaluate call: `evaluateArtifact(toGraderView(contract), diff, verifier)`.
+- **The `scope?: never` brand is load-bearing — do not remove it.** A first cut used
+  a plain `GraderView { version, criteria }` and claimed passing scope was a compile
+  error. It was **not**: `Contract` is a structural *superset* of that shape, so a
+  `Contract` (scope and all) is assignable to it, and a future caller could pass one
+  straight into the grader — it would compile and `JSON.stringify` the scope into the
+  prompt. Independent review caught this. The `scope?: never` brand makes
+  `Contract.scope: ScopeConstraint[]` incompatible (`never`), so a `Contract` is
+  genuinely rejected (`TS2345`). The guarantee is the brand; without it the type
+  split is only single-call-site discipline. A `@ts-expect-error` regression in
+  `tests/contract-scope-split.test.ts` pins it: drop the brand and `tsc` fails on the
+  now-unused directives (`TS2578`), turning a silent scope re-admission into a build
+  break.
 - **This holds on every freeze path.** The projection sits at the grader boundary,
   downstream of freezing, so it applies identically whether the contract froze by
   agreement or by the **round-cap force-freeze** — closing the trapdoor that sank
