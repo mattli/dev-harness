@@ -115,7 +115,7 @@ test("transcript tolerates a malformed GENERATE line (missing cost/tools) withou
 test("transcript still surfaces a stage's frozen requirements (criteria)", () => {
   const md = renderTranscript([
     ev({ phase: "NEGOTIATE", agentRole: "system", sprint: 0, outputDigest: "frozen (round-cap)",
-         contract: { version: 1, frozen: true,
+         contract: { version: 1, frozen: true, scope: [],
            criteria: [{ id: "c1", description: "sum(a,b)=a+b", verifyBy: "node:test" }] } }),
     ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100", score: 100 }),
   ], st());
@@ -125,7 +125,7 @@ test("transcript still surfaces a stage's frozen requirements (criteria)", () =>
 test("transcript collapses newlines in a criterion so it stays on one line", () => {
   const md = renderTranscript([
     ev({ phase: "NEGOTIATE", agentRole: "system", sprint: 0,
-         contract: { version: 1, frozen: true,
+         contract: { version: 1, frozen: true, scope: [],
            criteria: [{ id: "c1", description: "first\nsecond", verifyBy: "t" }] } }),
     ev({ phase: "EVALUATE", agentRole: "evaluator", sprint: 0, outputDigest: "score 100", score: 100 }),
   ], st());

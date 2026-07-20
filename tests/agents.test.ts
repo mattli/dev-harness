@@ -12,7 +12,7 @@ const fakeStream = (text: string): QueryFn => async function* () {
 };
 
 const sprint: Sprint = { id: 2, title: "Implement sum module", description: "export sum(a,b)=a+b" };
-const contract: Contract = { version: 1, criteria: [{ id: "c1", description: "sum works", verifyBy: "test" }], frozen: true };
+const contract: Contract = { version: 1, criteria: [{ id: "c1", description: "sum works", verifyBy: "test" }], scope: [], frozen: true };
 
 test("planner parses the title and sprint array", async () => {
   const q = fakeStream('{"title":"csv-json-converter","sprints":[{"title":"S1","description":"do a"},{"title":"S2","description":"do b"}]}');

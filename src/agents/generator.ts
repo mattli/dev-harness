@@ -14,8 +14,8 @@ export function buildProposePrompt(goal: string, sprint: Sprint, prev: PriorRoun
     `Sprint ${sprint.id}: ${sprint.title}\n${sprint.description}`,
     prev
       ? `Your prior contract (v${prev.contract.version}):\n${JSON.stringify(prev.contract, null, 2)}\n\nThe evaluator's critique of it:\n${prev.critique}\n\nRevise the contract to address the critique.`
-      : `Propose a contract for THIS sprint: granular, testable criteria, each with how it will be verified.`,
-    'Output the contract as a single fenced ```json code block and nothing else:\n```json\n{"criteria":[{"id":"c1","description":"...","verifyBy":"..."}]}\n```',
+      : `Propose a contract for THIS sprint: granular, testable acceptance criteria (each with how it will be verified), plus any intent-level scope restrictions in a separate "scope" list.`,
+    'Output the contract as a single fenced ```json code block and nothing else. "criteria" are the behavioral acceptance criteria (graded); "scope" holds out-of-scope areas / intent restrictions at directory/module granularity (NOT an exact file list) and may be omitted or empty:\n```json\n{"criteria":[{"id":"c1","description":"...","verifyBy":"..."}],"scope":[{"id":"s1","description":"..."}]}\n```',
   ].join("\n\n");
 }
 
@@ -39,9 +39,10 @@ export async function proposeContract(deps: GeneratorDeps, sprint: Sprint, prev:
   // `{"criteria":[]}` (which would freeze an unsatisfiable no-op contract).
   const parsed = extractJsonObject(
     res.text,
-    (o): o is { criteria: Contract["criteria"] } => {
-      const crit = (o as { criteria?: unknown } | null)?.criteria;
-      return (
+    (o): o is { criteria: Contract["criteria"]; scope?: unknown } => {
+      const rec = o as { criteria?: unknown; scope?: unknown } | null;
+      const crit = rec?.criteria;
+      const critOk =
         Array.isArray(crit) &&
         crit.length > 0 &&
         crit.every(
@@ -51,11 +52,26 @@ export async function proposeContract(deps: GeneratorDeps, sprint: Sprint, prev:
             typeof (c as { id?: unknown }).id === "string" &&
             typeof (c as { description?: unknown }).description === "string" &&
             typeof (c as { verifyBy?: unknown }).verifyBy === "string",
-        )
-      );
+        );
+      // scope is optional; when present it must be a well-typed {id,description}
+      // array. A malformed scope is rejected rather than silently dropped so it
+      // can't smuggle graded content — but an absent scope is fine (defaults []).
+      const scope = rec?.scope;
+      const scopeOk =
+        scope === undefined ||
+        (Array.isArray(scope) &&
+          scope.every(
+            (s) =>
+              s != null &&
+              typeof s === "object" &&
+              typeof (s as { id?: unknown }).id === "string" &&
+              typeof (s as { description?: unknown }).description === "string",
+          ));
+      return critOk && scopeOk;
     },
   );
-  return { version: (prev?.contract.version ?? 0) + 1, criteria: parsed.criteria, frozen: false };
+  const scope = (parsed.scope as Contract["scope"] | undefined) ?? [];
+  return { version: (prev?.contract.version ?? 0) + 1, criteria: parsed.criteria, scope, frozen: false };
 }
 
 export async function generateCode(deps: GeneratorDeps, sprint: Sprint, contract: Contract): Promise<AgentResult> {

@@ -21,7 +21,7 @@ const happyDeps = (): LoopDeps => ({
   nowMs: () => 0,
   runsDir: mkdtempSync(join(tmpdir(), "runs-")),
   planRun: async () => ({ title: "test-run", sprints: [{ id: 0, title: "S", description: "d" }] }),
-  proposeContract: async (_sprint, prev) => ({ version: (prev?.contract.version ?? 0) + 1, criteria: [], frozen: false }),
+  proposeContract: async (_sprint, prev) => ({ version: (prev?.contract.version ?? 0) + 1, criteria: [], scope: [], frozen: false }),
   critiqueContract: async (_sprint, c) => ({ agreed: true, contract: c, critique: "ok" }),
   generateCode: async () => ({ text: "done", costUsd: 0.1, tokens: 10, toolCalls: [] }),
   runVerifier: async () => ({ passed: true, findings: [] }),
@@ -95,7 +95,7 @@ test("NEGOTIATE trace event carries the frozen contract's criteria", async () =>
     ...happyDeps(),
     runsDir,
     proposeContract: async (_sprint, prev) => ({
-      version: (prev?.contract.version ?? 0) + 1, frozen: false,
+      version: (prev?.contract.version ?? 0) + 1, frozen: false, scope: [],
       criteria: [{ id: "c1", description: "sum(a,b)=a+b", verifyBy: "node:test" }],
     }),
   };
@@ -182,7 +182,7 @@ test("halts mid-negotiation when a backstop trips before the first Opus call", a
   const deps: LoopDeps = {
     ...happyDeps(),
     nowMs,
-    proposeContract: async (_sprint, prev) => { proposed = true; return { version: (prev?.contract.version ?? 0) + 1, criteria: [], frozen: false }; },
+    proposeContract: async (_sprint, prev) => { proposed = true; return { version: (prev?.contract.version ?? 0) + 1, criteria: [], scope: [], frozen: false }; },
     generateCode: async () => { generated = true; return { text: "", costUsd: 0, tokens: 0, toolCalls: [] }; },
     removeWorktree: async () => { removed = true; },
   };

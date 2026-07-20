@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import type { RunConfig } from "../config/types.js";
 import type { RunState, Sprint } from "../state/types.js";
-import type { Contract, FreezeReason } from "../contract/types.js";
+import type { Contract, FreezeReason, GraderView } from "../contract/types.js";
+import { toGraderView } from "../contract/types.js";
 import type { AgentResult } from "../agents/invoke.js";
 import type { VerifierResult } from "../verifier/types.js";
 import { StateStore } from "../state/store.js";
@@ -21,7 +22,10 @@ export interface LoopDeps {
   generateCode: (sprint: Sprint, c: Contract, cwd: string) => Promise<AgentResult>;
   runVerifier: (cwd: string) => Promise<VerifierResult>;
   worktreeDiff: (worktreePath: string) => Promise<string>;
-  evaluateArtifact: (c: Contract, artifactDiff: string, v: VerifierResult) => Promise<{ score: number | null; findings: string[] }>;
+  // Takes a GraderView (version + criteria), NOT a Contract: the blind scorer
+  // structurally cannot receive the contract's scope (cause-#3 fix). The
+  // orchestrator projects via toGraderView at the call site below.
+  evaluateArtifact: (view: GraderView, artifactDiff: string, v: VerifierResult) => Promise<{ score: number | null; findings: string[] }>;
   createWorktree: (projectPath: string, root: string, branch: string) => Promise<{ path: string; branch: string }>;
   commitWorktree: (worktreePath: string, message: string) => Promise<boolean>;
   removeWorktree: (projectPath: string, path: string) => Promise<void>;
@@ -156,10 +160,12 @@ export async function runLoop(config: RunConfig, deps: LoopDeps): Promise<RunSta
 
         const verified = await deps.runVerifier(wt.path);
         // The evaluator grades the ARTIFACT (diff of the produced changes) against
-        // the frozen contract — blind to the goal/sprint, the generator's
-        // transcript, and commit messages (none of which it receives).
+        // the frozen contract's ACCEPTANCE CRITERIA — blind to the goal/sprint, the
+        // generator's transcript, commit messages, AND the contract's scope (none
+        // of which it receives). toGraderView drops scope here, so a scope/file-set
+        // restriction can never reach the blind scorer, on any freeze path.
         const artifactDiff = await deps.worktreeDiff(wt.path);
-        const evalRes = await deps.evaluateArtifact(contract, artifactDiff, verified);
+        const evalRes = await deps.evaluateArtifact(toGraderView(contract), artifactDiff, verified);
 
         // An unparseable score is an ERROR, never a 0 — a flaky parse must not be
         // able to silently drive an advance or a no-progress decision.

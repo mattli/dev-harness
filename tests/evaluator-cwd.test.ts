@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { critiqueContract, evaluateArtifact, type EvaluatorDeps } from "../src/agents/evaluator.js";
 import type { QueryFn } from "../src/agents/invoke.js";
 import type { Sprint } from "../src/state/types.js";
-import type { Contract } from "../src/contract/types.js";
+import { toGraderView, type Contract } from "../src/contract/types.js";
 import type { VerifierResult } from "../src/verifier/types.js";
 
 // The two evaluator roles have OPPOSITE cwd rules, and both are pinned here at
@@ -29,7 +29,7 @@ function spyQuery(reply: string): { queryFn: QueryFn; seen: Array<string | undef
 
 const deps = (queryFn: QueryFn): EvaluatorDeps => ({ queryFn, model: "m", goal: "g" });
 const sprint: Sprint = { id: 0, title: "t", description: "d" };
-const contract: Contract = { version: 1, criteria: [], frozen: true };
+const contract: Contract = { version: 1, criteria: [], scope: [], frozen: true };
 const verifier: VerifierResult = { passed: true, findings: [] };
 
 test("critiqueContract inspects the project worktree cwd, not the harness cwd", async () => {
@@ -40,7 +40,7 @@ test("critiqueContract inspects the project worktree cwd, not the harness cwd", 
 
 test("evaluateArtifact stays BLIND — never runs in the worktree cwd", async () => {
   const { queryFn, seen } = spyQuery("FINAL SCORE: 80");
-  await evaluateArtifact(deps(queryFn), contract, "diff", verifier);
+  await evaluateArtifact(deps(queryFn), toGraderView(contract), "diff", verifier);
   // No worktree path is threaded in: the scorer's query carries no cwd.
   expect(seen).toEqual([undefined]);
 });
