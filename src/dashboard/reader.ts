@@ -33,6 +33,14 @@ export interface DashboardData {
    *  explicit "updating" / last-known-good discriminator. A merely-incomplete or
    *  missing-optional-field state is NOT degraded. */
   degraded: boolean;
+  /** The explicit "updating"/stale signal for the /data endpoint, set to the
+   *  same condition as {@link degraded}: true ONLY when state.json is
+   *  corrupt/half-written/absent so the reader is serving fallbacks rather than
+   *  a freshly-parsed state. Named separately from `degraded` because the
+   *  contract requires a stable `stale` discriminator on the wire; the page and
+   *  poller can key off either. A merely-incomplete or missing-optional-field
+   *  state is NOT stale. */
+  stale: boolean;
 }
 
 /** Read a file to text, returning null on any read failure (absent/unreadable).
@@ -122,6 +130,7 @@ function emptyData(scores: ScoreEntry[], phase: Phase | null): DashboardData {
     elapsedMs: null,
     scores,
     degraded: true,
+    stale: true,
   };
 }
 
@@ -186,6 +195,7 @@ export function assembleDashboardData(runDir: string, nowMs: number): DashboardD
     elapsedMs: computeElapsedMs(nowMs, state.startedAt),
     scores,
     degraded: false,
+    stale: false,
   };
 }
 

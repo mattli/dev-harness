@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { resolveAndAssemble, type DashboardData } from "./reader.js";
+import { argv, env } from "node:process";
+import { resolveAndAssemble, findLatestRunDir, type DashboardData } from "./reader.js";
 
 /** Options for {@link start}. Either an explicit `runDir` (what tests always
  *  pass) or a `runsDir` to auto-discover the latest run under; `port` defaults
@@ -64,6 +65,7 @@ function currentData(opts: StartOptions): DashboardData {
       elapsedMs: null,
       scores: [],
       degraded: true,
+      stale: true,
     };
   }
 }
@@ -129,7 +131,7 @@ function renderPage(data: DashboardData): string {
 <body>
 <h1>dev-harness live run <span id="runId">${orDash(data.runId)}</span></h1>
 <div class="field"><span class="label">Status</span><span id="status">${orDash(data.status)}</span>
-  <span id="degraded" class="degraded">${data.degraded ? "(updating…)" : ""}</span></div>
+  <span id="degraded" class="degraded">${data.stale ? "(updating…)" : ""}</span></div>
 <div class="field"><span class="label">Current sprint</span><span id="currentSprint">${sprintLine}</span></div>
 <div class="field"><span class="label">Current round</span><span id="contractVersion">${orDash(data.contractVersion)}</span></div>
 <div class="field"><span class="label">Current step</span><span id="phase">${orDash(data.phase)}</span></div>
@@ -154,7 +156,7 @@ function renderPage(data: DashboardData): string {
   function apply(d) {
     set("runId", dash(d.runId));
     set("status", dash(d.status));
-    set("degraded", d.degraded ? "(updating…)" : "");
+    set("degraded", d.stale ? "(updating…)" : "");
     set("currentSprint", d.currentSprint === null ? "—" : "#" + d.currentSprint + " " + dash(d.currentSprintTitle));
     set("contractVersion", dash(d.contractVersion));
     set("phase", dash(d.phase));
@@ -211,7 +213,7 @@ function handle(req: IncomingMessage, res: ServerResponse, opts: StartOptions): 
     } catch {
       // Extremely defensive: even JSON.stringify shouldn't fail on our plain
       // object, but never let /data 500.
-      body = '{"degraded":true,"scores":[]}';
+      body = '{"degraded":true,"stale":true,"scores":[]}';
     }
     res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     res.end(body);
@@ -262,4 +264,78 @@ export function start(opts: StartOptions = {}): Promise<DashboardServer> {
       });
     });
   });
+}
+
+/**
+ * Resolve {@link StartOptions} target selection from a raw argv-style token
+ * list (the args AFTER the node/script pair). Pure and side-effect free — it
+ * reads no files and binds no port — so it is unit-testable and import-safe.
+ *
+ * Selection rules (mirrors the sprint contract):
+ *   - An explicit run-folder path (first positional arg, or `--run-dir <path>`)
+ *     wins: it is returned as `runDir`.
+ *   - Otherwise, a `--runs-dir <path>` (or the default `runs/`) is returned as
+ *     `runsDir`, so {@link start} auto-discovers the most-recently-modified run
+ *     under it via {@link findLatestRunDir}.
+ *   - An optional `--port <n>` / `--host <h>` are parsed when present.
+ *
+ * This does NOT touch the filesystem: discovery happens lazily inside start()
+ * per request, keeping this helper trivially testable.
+ */
+export function resolveTargetFromArgs(args: readonly string[]): StartOptions {
+  const opts: StartOptions = {};
+  const positionals: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--run-dir" || a === "--runDir") {
+      opts.runDir = args[++i];
+    } else if (a === "--runs-dir" || a === "--runsDir") {
+      opts.runsDir = args[++i];
+    } else if (a === "--port") {
+      const n = Number(args[++i]);
+      if (Number.isFinite(n)) opts.port = n;
+    } else if (a === "--host") {
+      opts.host = args[++i];
+    } else if (a.startsWith("--")) {
+      // Unknown flag with no value semantics — ignore rather than crash.
+    } else {
+      positionals.push(a);
+    }
+  }
+  // A bare positional path is treated as the explicit run dir (unless --run-dir
+  // already set one).
+  if (opts.runDir === undefined && positionals.length > 0) {
+    opts.runDir = positionals[0];
+  }
+  // Default target root when nothing explicit was given: auto-discover under
+  // runs/ (findLatestRunDir tolerates an absent dir, degrading gracefully).
+  if (opts.runDir === undefined && opts.runsDir === undefined) {
+    opts.runsDir = "runs";
+  }
+  return opts;
+}
+
+/**
+ * CLI entrypoint: parse argv, start the server, print the bound URL. Kept as an
+ * exported function (never auto-invoked at import) so importing this module has
+ * no side effect — the guarded call below only fires when the file is run as the
+ * process entrypoint, which never happens under the test runner's import.
+ */
+export async function main(rawArgv: readonly string[] = argv.slice(2)): Promise<DashboardServer> {
+  const opts = resolveTargetFromArgs(rawArgv);
+  const s = await start(opts);
+  // A tiny operator hint; harmless if stdout is not a TTY.
+  process.stdout.write(`dev-harness dashboard listening on ${s.url}\n`);
+  return s;
+}
+
+// Direct-invocation guard: only run main() when this module is the actual
+// process entrypoint (e.g. `tsx src/dashboard/server.ts` or `node .../server.js`).
+// Under vitest/import the guard is false, so no server starts and no port binds.
+const invokedPath = argv[1] ?? "";
+const isEntry =
+  invokedPath.endsWith("dashboard/server.ts") ||
+  invokedPath.endsWith("dashboard/server.js");
+if (isEntry && env.VITEST === undefined) {
+  void main();
 }
