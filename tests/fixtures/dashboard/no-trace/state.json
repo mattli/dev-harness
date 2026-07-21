@@ -1,0 +1,17 @@
+{
+  "runId": "notrace1",
+  "goal": "# Goal: a run whose trace has not been written yet",
+  "title": "no-trace run",
+  "startedAt": "2026-07-21T07:00:00.000Z",
+  "status": "running",
+  "sprints": [
+    { "id": 0, "title": "Sprint zero", "description": "s0" }
+  ],
+  "currentSprint": 0,
+  "contractVersion": 1,
+  "scores": [],
+  "iterations": 0,
+  "budgetSpentUsd": 0,
+  "haltReason": null,
+  "contractFreezeReason": null
+}

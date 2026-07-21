@@ -1,0 +1,2 @@
+{"ts":"2026-07-21T10:00:01.000Z","runId":"midwrite","sprint":0,"phase":"PLAN","agentRole":"planner","contractVersion":1,"inputDigest":"a","toolCalls":[],"outputDigest":"b","tokens":100,"costUsd":0.01}
+{"ts":"2026-07-21T10:00:02.000Z","runId":"midwrite","sprint":0,"phase":"GENERATE","agentRole":"generator","contractVersion":1,"inputDigest":"a","toolCalls":["Write"],"outputDigest":"b","tokens":300,"costUsd":0.03}
