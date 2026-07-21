@@ -58,6 +58,15 @@ or comment-only change does not. The lesson isn't "review every fix"; it's "the
 fixes that touch how things work, especially late close-out fixes that bypassed
 normal review, are where self-approval bites."
 
+**Scale review to blast radius.** The same calibration governs whether a *new*
+change needs independent review before merge, not just fixes. Changes to
+judgment machinery (grader, negotiation, contract, parsers) or control flow get
+full adversarial review. A small pure module with no control-flow surface,
+covered by a green hermetic suite and gated by the human merge, does not — the
+suite + merge gate is sufficient there. (2026-07-20: the cost-audit run's
+`cost_audit.py` — pure stdlib, 143 tests green — was merged to voice-tutor
+`main` on this basis, Matt's explicit call.)
+
 ## Commit Before a Workflow-Backed Code Review
 The workflow-backed /code-review spawns subagents that check out branches inside the
 working repo, and can leave you parked on a different branch (or risk clobbering
