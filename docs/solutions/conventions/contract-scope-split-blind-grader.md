@@ -102,3 +102,13 @@ isn't a smarter regex — it's making the blind boundary structurally incapable 
 seeing the thing it can't fairly judge. When you extend the `Contract` type, ask
 which side of the blind boundary each field belongs on, and enforce it in the
 grader's *signature*, not in a prompt.
+
+## Real-run confirmation (2026-07-21, run `mru5b2o4`)
+First real task since the fix landed (the standalone `deepgram_request_audit`
+build): the split behaved. Contracts carried `criteria` + `scope` separately and
+the blind grader received **no scope** — verified in the run trace: scope present
+in NEGOTIATE, absent in EVALUATE. It exercised the **round-cap force-freeze path**
+(`contractFreezeReason: round-cap`, contractVersion 5) — the exact trapdoor the
+structural projection was built to keep safe — and the grader stayed scope-free
+through it. No unwinnable-contract symptom (sprint 1 scored 0/0 then recovered to
+96 = generator iteration, verifier ultimately green).

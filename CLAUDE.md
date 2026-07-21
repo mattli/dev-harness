@@ -32,6 +32,22 @@ the run's clone offline-ness carried over, and treat green-only-because-a-key-is
 a hermeticity failure, not a pass. See
 `docs/solutions/conventions/harvested-tests-can-be-non-hermetic.md`.
 
+## Credentialed Smoke Run for Harness Artifacts That Hit the Network
+A harness-built tool with a network fetcher isn't trustworthy on the strength of
+its hermetic suite alone: hermetic tests verify the tool against *fixtures its
+author invented*, so they're blind to how the real API actually behaves —
+pagination scheme, field nesting, response shape, undocumented limits. Make a
+credentialed live smoke run part of review before trusting such an artifact.
+Worked example (2026-07-21, `deepgram_request_audit`): the tool passed 4 sprints
+(96–98) and 3 rounds of workflow review with a green hermetic suite, yet the real
+Deepgram API rejected the page size it requested (docs said limit max 1000; the
+live max is 100) — every real fetch would have 400'd. Invisible to fixtures;
+obvious on the first live call. The same run's other real-only bugs — an
+offset/cursor pagination model against a `page`/`limit` API, and billed seconds
+nested under `response.details` — were likewise visible only against real
+responses. Related: [[Test Guarantees at Their Real-I/O Boundary]] is the same
+gap at the unit level; this is its integration-level twin.
+
 ## Don't Parse Model Output by Position — Emit a Marker and Key on It
 When extracting a value from LLM output, have the model emit a guaranteed,
 unambiguous marker (a labeled sentinel it's told to output exactly once, or
