@@ -473,14 +473,71 @@ export function findLatestRunDir(runsDir: string): string | null {
   return best ? best.path : null;
 }
 
+/**
+ * Auto-discover the newest run folder ACROSS all projects under `runsRoot`.
+ *
+ * The on-disk layout is runs/<project>/<run>/, so this scans two levels: each
+ * immediate child of `runsRoot` is a project, and each of ITS children holding a
+ * `state.json` is a run. Returns the run whose `state.json` was written most
+ * recently — the best "currently-active" signal, since a live run rewrites
+ * state.json every step — or null when none is found. Never throws.
+ *
+ * This is what an always-on dashboard points at: it follows whatever run is
+ * active regardless of which project the harness was aimed at. The `_archive`
+ * project is skipped so retired runs are never surfaced as the current one.
+ */
+export function findLatestRunAcrossProjects(runsRoot: string): string | null {
+  let projects: string[];
+  try {
+    projects = readdirSync(runsRoot);
+  } catch {
+    return null;
+  }
+  let best: { path: string; mtimeMs: number } | null = null;
+  for (const project of projects) {
+    if (project === "_archive") continue;
+    const projectPath = join(runsRoot, project);
+    let runs: string[];
+    try {
+      if (!statSync(projectPath).isDirectory()) continue;
+      runs = readdirSync(projectPath);
+    } catch {
+      // Not a directory / unreadable project entry: skip it.
+      continue;
+    }
+    for (const run of runs) {
+      const runPath = join(projectPath, run);
+      try {
+        if (!statSync(runPath).isDirectory()) continue;
+        // A real run folder always has state.json; rank by when it was last
+        // written so the actively-updating run wins over finished ones.
+        const mtimeMs = statSync(join(runPath, "state.json")).mtimeMs;
+        if (best === null || mtimeMs > best.mtimeMs) {
+          best = { path: runPath, mtimeMs };
+        }
+      } catch {
+        // No state.json (not a run folder) or unreadable: skip.
+      }
+    }
+  }
+  return best ? best.path : null;
+}
+
 /** Convenience: assemble against an explicit path when given, otherwise against
- *  the auto-discovered latest run under `runsDir`. Returns a degraded object when
- *  no run can be found rather than throwing. */
+ *  the auto-discovered latest run. Selection precedence: an explicit `runDir`,
+ *  else the newest run directly under a single `runsDir`, else the newest run
+ *  across all projects under `runsRoot`. Returns a degraded object when no run
+ *  can be found rather than throwing. */
 export function resolveAndAssemble(
-  opts: { runDir?: string; runsDir?: string; nowMs: number },
+  opts: { runDir?: string; runsDir?: string; runsRoot?: string; nowMs: number },
 ): DashboardData {
   const target =
-    opts.runDir ?? (opts.runsDir ? findLatestRunDir(opts.runsDir) : null);
+    opts.runDir ??
+    (opts.runsDir
+      ? findLatestRunDir(opts.runsDir)
+      : opts.runsRoot
+        ? findLatestRunAcrossProjects(opts.runsRoot)
+        : null);
   if (!target) return emptyData([], null);
   return assembleDashboardData(target, opts.nowMs);
 }

@@ -9,9 +9,14 @@ import { resolveAndAssemble, findLatestRunDir, type DashboardData, type SprintSu
 export interface StartOptions {
   /** Explicit run-folder path to serve. Takes precedence over `runsDir`. */
   runDir?: string;
-  /** Root under which to auto-discover the most-recent run when `runDir` is
-   *  omitted. */
+  /** A single project's runs root under which to auto-discover the most-recent
+   *  run (runs/<run>/) when `runDir` is omitted. */
   runsDir?: string;
+  /** The top-level runs/ root under which to auto-discover the newest run
+   *  ACROSS all projects (runs/<project>/<run>/). What the always-on dashboard
+   *  points at so it follows whatever run is active. Used only when neither
+   *  `runDir` nor `runsDir` is given. */
+  runsRoot?: string;
   /** Port to bind. 0 (the default) asks the OS for an ephemeral port. */
   port?: number;
   /** Host to bind. Defaults to 127.0.0.1 — localhost only, never public. */
@@ -45,7 +50,7 @@ function currentData(opts: StartOptions): DashboardData {
     // resolveAndAssemble uses the explicit runDir when given, else auto-discovers
     // the latest run under runsDir, else returns a degraded object — it never
     // throws, so /data can always answer 200.
-    return resolveAndAssemble({ runDir: opts.runDir, runsDir: opts.runsDir, nowMs });
+    return resolveAndAssemble({ runDir: opts.runDir, runsDir: opts.runsDir, runsRoot: opts.runsRoot, nowMs });
   } catch {
     // Defensive: resolveAndAssemble is designed never to throw, but if a future
     // change regresses that, still respond rather than 500.
@@ -835,6 +840,8 @@ export function resolveTargetFromArgs(args: readonly string[]): StartOptions {
       opts.runDir = args[++i];
     } else if (a === "--runs-dir" || a === "--runsDir") {
       opts.runsDir = args[++i];
+    } else if (a === "--runs-root" || a === "--runsRoot") {
+      opts.runsRoot = args[++i];
     } else if (a === "--port") {
       const n = Number(args[++i]);
       if (Number.isFinite(n)) opts.port = n;
@@ -851,10 +858,16 @@ export function resolveTargetFromArgs(args: readonly string[]): StartOptions {
   if (opts.runDir === undefined && positionals.length > 0) {
     opts.runDir = positionals[0];
   }
-  // Default target root when nothing explicit was given: auto-discover under
-  // runs/ (findLatestRunDir tolerates an absent dir, degrading gracefully).
-  if (opts.runDir === undefined && opts.runsDir === undefined) {
-    opts.runsDir = "runs";
+  // Default when nothing explicit was given: auto-discover the newest run
+  // ACROSS all projects under runs/ (the real layout is runs/<project>/<run>/,
+  // so a single-level runsDir would wrongly land on a project folder). Discovery
+  // tolerates an absent dir, degrading gracefully.
+  if (
+    opts.runDir === undefined &&
+    opts.runsDir === undefined &&
+    opts.runsRoot === undefined
+  ) {
+    opts.runsRoot = "runs";
   }
   return opts;
 }

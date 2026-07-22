@@ -202,16 +202,25 @@ describe("dashboard target selection — c5 arg parsing", () => {
     expect(opts.runDir).toBe("/explicit");
   });
 
-  test("--runs-dir selects an auto-discovery root", () => {
+  test("--runs-dir selects a single-project auto-discovery root", () => {
     const opts = resolveTargetFromArgs(["--runs-dir", "/my/runs"]);
     expect(opts.runsDir).toBe("/my/runs");
     expect(opts.runDir).toBeUndefined();
+    expect(opts.runsRoot).toBeUndefined();
   });
 
-  test("no args defaults to auto-discovery under runs/", () => {
+  test("--runs-root selects the cross-project auto-discovery root", () => {
+    const opts = resolveTargetFromArgs(["--runs-root", "/all/runs"]);
+    expect(opts.runsRoot).toBe("/all/runs");
+    expect(opts.runDir).toBeUndefined();
+    expect(opts.runsDir).toBeUndefined();
+  });
+
+  test("no args defaults to cross-project auto-discovery under runs/", () => {
     const opts = resolveTargetFromArgs([]);
     expect(opts.runDir).toBeUndefined();
-    expect(opts.runsDir).toBe("runs");
+    expect(opts.runsDir).toBeUndefined();
+    expect(opts.runsRoot).toBe("runs");
   });
 
   test("--port and --host are parsed when present", () => {
@@ -247,6 +256,43 @@ describe("dashboard target selection — c5 arg parsing", () => {
     utimesSync(newer, t, t);
 
     const s = await start({ runsDir: runs, port: 0 });
+    open.push(s);
+    const data = await (await fetch(`${s.url}/data`)).json();
+    expect(data.runId).toBe("NEWEST");
+  });
+
+  test("cross-project auto-discovery serves the newest run across projects, skipping _archive", async () => {
+    const runsRoot = mkdtempSync(join(tmpdir(), "dash-root-"));
+    // Layout: runs/<project>/<run>/state.json across three projects, including
+    // an _archive whose run has the NEWEST mtime — it must still be skipped.
+    const specs = [
+      { project: "projA", run: "old", runId: "OLD", age: -2000 },
+      { project: "projB", run: "active", runId: "NEWEST", age: -10 },
+      { project: "_archive", run: "retired", runId: "ARCHIVED", age: 0 },
+    ];
+    const now = Date.now() / 1000;
+    for (const { project, run, runId, age } of specs) {
+      const dir = join(runsRoot, project, run);
+      mkdirSync(dir, { recursive: true });
+      const statePath = join(dir, "state.json");
+      writeFileSync(
+        statePath,
+        JSON.stringify({
+          runId,
+          goal: "g",
+          startedAt: "2026-07-21T10:00:00.000Z",
+          status: "running",
+          sprints: [{ id: 0, title: "T", description: "d" }],
+          currentSprint: 0,
+          contractVersion: 1,
+          scores: [],
+        }),
+      );
+      // Rank is by state.json mtime (the "actively-updating" signal).
+      utimesSync(statePath, now + age, now + age);
+    }
+
+    const s = await start({ runsRoot, port: 0 });
     open.push(s);
     const data = await (await fetch(`${s.url}/data`)).json();
     expect(data.runId).toBe("NEWEST");
