@@ -325,8 +325,11 @@ function scoreChip(score: number): string {
 }
 
 /** One sprint card: title + score (score when done, "best N" when halted), the
- *  plan description, the phase pipeline on the active sprint, and the metrics
- *  sub-line. Mirrored by the client-side builder so a poll rebuilds it. */
+ *  phase pipeline on the active sprint, and the metrics sub-line. The plan-time
+ *  description is intentionally NOT rendered — it is a dense technical contract,
+ *  not human-readable; the concise title carries the meaning. (A plain-language
+ *  per-sprint summary is a separate upstream task.) Mirrored by the client-side
+ *  builder so a poll rebuilds it. */
 function renderSprintItem(s: SprintSummary): string {
   const n = s.index;
   const node = s.state === "done" ? "✓" : s.state === "halted" ? "❚❚" : String(n + 1);
@@ -337,11 +340,10 @@ function renderSprintItem(s: SprintSummary): string {
     headRight = `<span class="step-meta">best ${scoreChip(s.score)}</span>`;
   }
   const pipe = s.state === "running" || s.state === "halted" ? renderPipe(s) : "";
-  const desc = s.description === null ? "" : `<div class="step-desc">${esc(s.description)}</div>`;
   return (
     `<div class="step ${s.state}"><div class="node">${node}</div><div class="step-body">` +
     `<div class="step-head"><span class="step-title">${orDash(s.title)}</span>${headRight}</div>` +
-    `${desc}${pipe}${renderMetrics(s)}</div></div>`
+    `${pipe}${renderMetrics(s)}</div></div>`
   );
 }
 
@@ -554,8 +556,6 @@ function renderPage(data: DashboardData): string {
   .score { font-weight:600; padding:.05rem .34rem; border-radius:5px; }
   .score.good { color:var(--good); background:var(--good-soft); }
   .score.warn { color:var(--warn); background:var(--warn-soft); }
-  .step-desc { color:var(--muted); font-size:.88rem; margin-top:.4rem; line-height:1.5; }
-  .step.pending .step-desc { color:var(--faint); }
   .step-metrics { margin-top:.65rem; font-family:var(--mono); font-size:.74rem; color:var(--muted); font-variant-numeric:tabular-nums; line-height:1.5; }
   .pipe { margin-top:.9rem; display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:.65rem .7rem; }
   .phase { display:flex; align-items:center; gap:.32rem; font-family:var(--mono); font-size:.74rem; color:var(--faint); }
@@ -682,10 +682,9 @@ function renderPage(data: DashboardData): string {
     if (s.state === "done" && s.score !== null && s.score !== undefined) headRight = '<span class="step-meta">' + scoreChip(s.score) + '</span>';
     else if (s.state === "halted" && s.score !== null && s.score !== undefined) headRight = '<span class="step-meta">best ' + scoreChip(s.score) + '</span>';
     var pipe = (s.state === "running" || s.state === "halted") ? pipeHTML(s) : "";
-    var desc = (s.description === null || s.description === undefined) ? "" : '<div class="step-desc">' + esc(s.description) + '</div>';
     return '<div class="step ' + s.state + '"><div class="node">' + node + '</div><div class="step-body">' +
       '<div class="step-head"><span class="step-title">' + dash(s.title) + '</span>' + headRight + '</div>' +
-      desc + pipe + metricsHTML(s) + '</div></div>';
+      pipe + metricsHTML(s) + '</div></div>';
   }
   function sprintsHTML(d) {
     if (isPlanning(d)) {
