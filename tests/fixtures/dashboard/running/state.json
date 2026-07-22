@@ -1,6 +1,6 @@
 {
   "runId": "mv0k3p2q",
-  "goal": "---\ntype: dev-harness-goal\n---\n# Goal: ship the thing\nBuild a read-only local web dashboard for the active or most recent dev-harness run.",
+  "goal": "---\ntype: dev-harness-goal\n---\n# Goal: ship the thing\nBuild a read-only local web dashboard for the active or most recent dev-harness run.\n\n## Requirements\n\n- Read state.json and trace.jsonl only.\n- Never write to the run folder.\n- Poll for updates in place.",
   "title": "ship the thing",
   "startedAt": "2026-07-21T10:00:00.000Z",
   "status": "running",

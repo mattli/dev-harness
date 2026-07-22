@@ -3,6 +3,13 @@ import { mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+const serverSrc = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "src",
+  "dashboard",
+  "server.ts",
+);
 import {
   start,
   resolveTargetFromArgs,
@@ -428,4 +435,188 @@ describe("dashboard v2 — c7 all four run states render 200", () => {
       expect(html).not.toMatch(/window\.location/);
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Contract-close: explicit /data-level and source-level assertions the frozen
+// contract enumerates, complementing the page-level checks above.
+//   c1  planning /data: totalSprints===0, empty sprintBreakdown, strip at Plan.
+//   c2  halted /data: derived attempts/edits/cost + non-null best-so-far score,
+//       and the passed card shows a plain score (no "best" prefix).
+//   c5  the /goal view renders a "#"/"##" heading as <hN> and a "- item" as
+//       <li> (formatted, not a raw monospace dump), and no new npm dep.
+//   c6  ALL six halt codes map to the exact prototype HALT_REASONS wording.
+//   c8  /data is 200 JSON for all four states; corrupt cold-start is stale:true.
+// ---------------------------------------------------------------------------
+
+describe("dashboard v2 — c1 planning state /data shape", () => {
+  test("planning /data reports no plan (totalSprints 0, empty breakdown) and strip sits at Plan", async () => {
+    const s = await launch(fx("planning"));
+    const data = await (await fetch(`${s.url}/data`)).json();
+    // No plan has formed yet.
+    expect(data.totalSprints).toBe(0);
+    expect(Array.isArray(data.sprintBreakdown)).toBe(true);
+    expect(data.sprintBreakdown).toHaveLength(0);
+
+    // The coarse strip is at the first (Plan) stage: Plan "current", the other
+    // two "pending", zero progress fill.
+    const rendered = renderedOnly(await getText(`${s.url}/`));
+    expect(rendered).toContain("--progress:0");
+    // Plan is the current stage; Generate/Done are still pending (not done).
+    expect(rendered).toMatch(/class=["']stage current["'][^>]*>\s*<span class=["']stage-node["']>\s*<\/span><span class=["']stage-label["']>Plan</);
+    expect(rendered).not.toContain("stage done");
+  });
+});
+
+describe("dashboard v2 — c2 halted /data derived metrics + best-so-far, passed plain score", () => {
+  test("halted /data sprintBreakdown carries derived attempts>=2, edits>=1, cost>0 and a non-null best score", async () => {
+    const dir = fx("halted");
+    const s = await launch(dir);
+    const data = await (await fetch(`${s.url}/data`)).json();
+    // The halted current sprint (index 1) is the one exercising the metrics.
+    const row = data.sprintBreakdown[1];
+    expect(row.state).toBe("halted");
+    expect(row.attempts).toBeGreaterThanOrEqual(2);
+    expect(row.edits).toBeGreaterThanOrEqual(1);
+    expect(row.cost).toBeGreaterThan(0);
+    // best-so-far score is populated (61,72,70 → 72), never null on a halted
+    // sprint that reached at least one score.
+    expect(row.score).not.toBeNull();
+    expect(row.score).toBe(72);
+
+    // And on the served page it reads as "best <score>", not a plain score.
+    const body = await getText(`${s.url}/`);
+    expect(body).toMatch(/best\s*<span class=["']score[^>]*>72<\/span>/);
+  });
+
+  test("a passed/done card renders a plain score with NO 'best' prefix", async () => {
+    const s = await launch(fx("complete"));
+    const rendered = renderedOnly(await getText(`${s.url}/`));
+    // The final done sprint scored 91 — rendered as a bare score chip, not
+    // "best 91".
+    expect(rendered).toMatch(/<span class=["']score[^>]*>91<\/span>/);
+    expect(rendered).not.toMatch(/best\s*<span class=["']score[^>]*>91<\/span>/);
+  });
+});
+
+describe("dashboard v2 — c5 full-goal view is formatted markdown (headings + lists)", () => {
+  test("/goal renders a '#' heading as an <hN> and a '- item' as an <li>", async () => {
+    const s = await launch(fx("running"));
+    const res = await fetch(`${s.url}/goal`);
+    expect(res.status).toBe(200);
+    const goalHtml = await res.text();
+    // The complete goal body is present, formatted rather than a raw dump.
+    expect(goalHtml).toContain(
+      "Build a read-only local web dashboard for the active or most recent dev-harness run.",
+    );
+    // A markdown heading became a real heading element (h1..h6).
+    expect(goalHtml).toMatch(/<h[1-6][^>]*>[^<]*Requirements[^<]*<\/h[1-6]>/i);
+    // A markdown bullet became a real list item.
+    expect(goalHtml).toMatch(/<li[^>]*>[^<]*Never write to the run folder\.[^<]*<\/li>/i);
+    // It is a <ul>, not a monospace <pre> dump.
+    expect(goalHtml).toContain("<ul>");
+    expect(goalHtml).not.toMatch(/<pre[^>]*>[\s\S]*Requirements/i);
+  });
+
+  test("package.json declares no new runtime dependency for the goal renderer", () => {
+    const pkg = JSON.parse(readFileSync(join(here, "..", "package.json"), "utf8"));
+    const deps = Object.keys(pkg.dependencies ?? {});
+    const allowed = new Set([
+      "@anthropic-ai/claude-agent-sdk",
+      "commander",
+      "execa",
+      "zod",
+    ]);
+    for (const d of deps) {
+      expect(allowed.has(d), `unexpected new dependency: ${d}`).toBe(true);
+    }
+    // No markdown library snuck into any dependency bucket.
+    const all = {
+      ...(pkg.dependencies ?? {}),
+      ...(pkg.devDependencies ?? {}),
+    };
+    for (const name of Object.keys(all)) {
+      expect(/markdown|marked|remark|markdown-it|showdown/i.test(name)).toBe(false);
+    }
+  });
+});
+
+describe("dashboard v2 — c6 all six halt codes map to the exact prototype wording", () => {
+  const EXPECTED: Record<string, { label: string; text: string }> = {
+    "wall-clock": {
+      label: "Paused",
+      text: "Reached the 30-minute limit for this sprint. Paused, not failed — the partial work is committed to the run branch.",
+    },
+    "max-iteration": {
+      label: "Paused",
+      text: "Used all its attempts on this sprint (6 tries) without clearing the score bar. Paused — partial work is saved.",
+    },
+    "no-progress": {
+      label: "Paused",
+      text: "The score stopped improving across several attempts, so it stopped rather than spin. Paused — partial work is saved.",
+    },
+    "usage-limit": {
+      label: "Paused",
+      text: "Hit your Claude subscription's usage limit. Paused — pick back up when the limit resets.",
+    },
+    "dollar-ceiling": {
+      label: "Paused",
+      text: "Reached the spending limit you set for this run. Paused — partial work is saved.",
+    },
+    "evaluator-parse-error": {
+      label: "Stopped",
+      text: "The grader returned an unreadable score, so the run stopped to be safe. This is a fault, not a normal pause.",
+    },
+  };
+
+  test("the served page (and its polling map) contains every code's exact sentence and label", async () => {
+    // The HALT_REASONS map is emitted as JSON into the polling script so a live
+    // re-render uses the same wording — so every code's exact text is present in
+    // the served document regardless of the current state.
+    const s = await launch(fx("halted"));
+    const body = await getText(`${s.url}/`);
+    for (const [code, { text }] of Object.entries(EXPECTED)) {
+      expect(body, `missing wording for ${code}`).toContain(text);
+    }
+    // Both label kinds are represented: five graceful "Paused", one "Stopped".
+    expect(body).toContain("Paused");
+    expect(body).toContain("Stopped");
+  });
+
+  test("the server source encodes each code with the correct Paused/Stopped label", () => {
+    const src = readFileSync(serverSrc, "utf8");
+    for (const [code, { label, text }] of Object.entries(EXPECTED)) {
+      expect(src, `missing code ${code}`).toContain(code);
+      expect(src, `missing text for ${code}`).toContain(text);
+    }
+    // The five StopReason codes are graceful "Paused"; the fault is "Stopped".
+    const paused = Object.entries(EXPECTED).filter(([, r]) => r.label === "Paused");
+    const stopped = Object.entries(EXPECTED).filter(([, r]) => r.label === "Stopped");
+    expect(paused).toHaveLength(5);
+    expect(stopped).toHaveLength(1);
+    expect(stopped[0][0]).toBe("evaluator-parse-error");
+  });
+});
+
+describe("dashboard v2 — c8 /data is 200 JSON for all four states, corrupt is stale", () => {
+  for (const name of ["planning", "running", "complete", "halted"]) {
+    test(`/data is 200 application/json for the ${name} fixture`, async () => {
+      const s = await launch(fx(name));
+      const res = await fetch(`${s.url}/data`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type") ?? "").toContain("application/json");
+      const data = await res.json();
+      expect(typeof data).toBe("object");
+      expect(data).not.toBeNull();
+      expect(data.stale).toBe(false);
+    });
+  }
+
+  test("corrupt cold-start /data is 200 with stale:true (never a 500)", async () => {
+    const s = await launch(fx("corrupt"));
+    const res = await fetch(`${s.url}/data`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.stale).toBe(true);
+  });
 });
