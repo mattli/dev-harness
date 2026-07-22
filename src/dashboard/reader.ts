@@ -11,6 +11,23 @@ export interface ScoreEntry {
   score: number;
 }
 
+/** One row of the per-sprint breakdown: what the sprint was, how many
+ *  negotiation rounds its contract took to freeze, its latest score, and whether
+ *  it's the one currently running. All derived from existing run-folder data
+ *  (state.sprints + trace NEGOTIATE/EVALUATE events) — nothing new is emitted. */
+export interface SprintSummary {
+  index: number;
+  title: string | null;
+  /** The sprint's plan-time description — "what this sprint did". Null absent. */
+  description: string | null;
+  /** Negotiation rounds = the frozen `contractVersion` on this sprint's
+   *  NEGOTIATE trace event. Null when the sprint hasn't negotiated yet. */
+  rounds: number | null;
+  /** Latest score for this sprint, or null when not yet evaluated. */
+  score: number | null;
+  current: boolean;
+}
+
 /** The display-mapped, plain-JS view the dashboard renders. Every field is
  *  either a real run-folder value or a null/placeholder — nothing here throws,
  *  so a mid-write or missing input degrades instead of blowing up. */
@@ -19,6 +36,10 @@ export interface DashboardData {
   goal: string | null;
   currentSprint: number | null;
   currentSprintTitle: string | null;
+  /** Total planned sprints = state.sprints.length (0 when absent). */
+  totalSprints: number;
+  /** Per-sprint breakdown (count, rounds, score) — one row per planned sprint. */
+  sprintBreakdown: SprintSummary[];
   contractVersion: number | null;
   phase: Phase | null;
   status: RunStatus | null;
@@ -93,13 +114,65 @@ function deriveScores(events: TraceEvent[], stateScores: unknown): ScoreEntry[] 
   return [];
 }
 
-/** Elapsed wall-clock in ms: caller-supplied `now` minus startedAt. Null when
- *  startedAt is absent or unparseable — never NaN. */
-function computeElapsedMs(nowMs: number, startedAt: unknown): number | null {
+/** Per-sprint breakdown from existing data: rounds = the frozen contractVersion
+ *  on each sprint's NEGOTIATE event; score = that sprint's latest EVALUATE score.
+ *  One row per planned sprint, in order. */
+function deriveSprintBreakdown(
+  sprints: { title?: string; description?: string }[],
+  events: TraceEvent[],
+  scores: ScoreEntry[],
+  currentSprint: number | null,
+): SprintSummary[] {
+  const roundsBySprint = new Map<number, number>();
+  for (const e of events) {
+    if (e.phase === "NEGOTIATE" && typeof e.sprint === "number" && typeof e.contractVersion === "number") {
+      roundsBySprint.set(e.sprint, e.contractVersion);
+    }
+  }
+  const scoreBySprint = new Map<number, number>();
+  for (const s of scores) {
+    if (s.sprint !== null) scoreBySprint.set(s.sprint, s.score);
+  }
+  return sprints.map((sp, i) => ({
+    index: i,
+    title: sp?.title ?? null,
+    description: sp?.description ?? null,
+    rounds: roundsBySprint.has(i) ? (roundsBySprint.get(i) as number) : null,
+    score: scoreBySprint.has(i) ? (scoreBySprint.get(i) as number) : null,
+    current: i === currentSprint,
+  }));
+}
+
+/** The latest trace-event timestamp in ms, or null when no event carries a
+ *  parseable `ts`. Takes the max rather than trusting positional order. */
+function lastEventTsMs(events: TraceEvent[]): number | null {
+  let max: number | null = null;
+  for (const e of events) {
+    const t = typeof e.ts === "string" ? Date.parse(e.ts) : NaN;
+    if (!Number.isNaN(t)) max = max === null ? t : Math.max(max, t);
+  }
+  return max;
+}
+
+/** Elapsed wall-clock in ms. For a LIVE run (status "running", or unknown) this
+ *  counts up: `nowMs` minus startedAt. For a FINISHED run (status "passed" or
+ *  "halted") it FREEZES at the run's real length — the last trace event's
+ *  timestamp minus startedAt — so a completed run shows how long it actually
+ *  took instead of ticking upward forever. Null when startedAt is absent or
+ *  unparseable — never NaN. */
+function computeElapsedMs(
+  nowMs: number,
+  startedAt: unknown,
+  status: RunStatus | null,
+  events: TraceEvent[],
+): number | null {
   if (typeof startedAt !== "string") return null;
   const started = Date.parse(startedAt);
   if (Number.isNaN(started)) return null;
-  return nowMs - started;
+  const finished = status === "passed" || status === "halted";
+  const lastTs = finished ? lastEventTsMs(events) : null;
+  const endMs = lastTs ?? nowMs;
+  return Math.max(0, endMs - started);
 }
 
 /** The current step/phase: the phase of the LAST trace.jsonl line, whatever its
@@ -119,6 +192,8 @@ function emptyData(scores: ScoreEntry[], phase: Phase | null): DashboardData {
     goal: null,
     currentSprint: null,
     currentSprintTitle: null,
+    totalSprints: 0,
+    sprintBreakdown: [],
     contractVersion: null,
     phase,
     status: null,
@@ -172,27 +247,33 @@ export function assembleDashboardData(runDir: string, nowMs: number): DashboardD
   }
 
   const scores = deriveScores(traceEvents, state.scores);
-  const sprints = Array.isArray(state.sprints) ? (state.sprints as { title?: string }[]) : [];
+  const sprints = Array.isArray(state.sprints)
+    ? (state.sprints as { title?: string; description?: string }[])
+    : [];
   const currentSprint = pick<number>(state, "currentSprint");
   const currentSprintTitle =
     currentSprint !== null && sprints[currentSprint]
       ? sprints[currentSprint].title ?? null
       : null;
+  const status = pick<RunStatus>(state, "status");
+  const sprintBreakdown = deriveSprintBreakdown(sprints, traceEvents, scores, currentSprint);
 
   return {
     runId: pick<string>(state, "runId"),
     goal: pick<string>(state, "goal"),
     currentSprint,
     currentSprintTitle,
+    totalSprints: sprints.length,
+    sprintBreakdown,
     contractVersion: pick<number>(state, "contractVersion"),
     phase,
-    status: pick<RunStatus>(state, "status"),
+    status,
     haltReason: pick<string>(state, "haltReason"),
     contractFreezeReason: pick<string>(state, "contractFreezeReason"),
     budgetSpentUsd: pick<number>(state, "budgetSpentUsd"),
     runDir: pick<string>(state, "runDir"),
     startedAt: pick<string>(state, "startedAt"),
-    elapsedMs: computeElapsedMs(nowMs, state.startedAt),
+    elapsedMs: computeElapsedMs(nowMs, state.startedAt, status, traceEvents),
     scores,
     degraded: false,
     stale: false,

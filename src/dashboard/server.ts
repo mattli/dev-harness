@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { argv, env } from "node:process";
-import { resolveAndAssemble, findLatestRunDir, type DashboardData } from "./reader.js";
+import { resolveAndAssemble, findLatestRunDir, type DashboardData, type SprintSummary } from "./reader.js";
 
 /** Options for {@link start}. Either an explicit `runDir` (what tests always
  *  pass) or a `runsDir` to auto-discover the latest run under; `port` defaults
@@ -54,6 +54,8 @@ function currentData(opts: StartOptions): DashboardData {
       goal: null,
       currentSprint: null,
       currentSprintTitle: null,
+      totalSprints: 0,
+      sprintBreakdown: [],
       contractVersion: null,
       phase: null,
       status: null,
@@ -101,47 +103,111 @@ function formatElapsed(ms: number | null): string {
  *  current fields inline (so a plain GET / is populated even before the first
  *  poll) plus a small polling script that refreshes them from /data in place —
  *  no meta-refresh, no full-page navigation. */
+/** Spend rounded to cents. Null → placeholder. */
+function fmtSpend(v: number | null): string {
+  return v === null || v === undefined ? "—" : `$${Number(v).toFixed(2)}`;
+}
+
+/** A finished run is one that reached a terminal status. While it's finished the
+ *  "current sprint/step" framing is wrong — those became the FINAL sprint/step —
+ *  and elapsed is a fixed duration, so labels flip accordingly. */
+function isFinished(status: string | null): boolean {
+  return status === "passed" || status === "halted";
+}
+
+/** One sprint's server-rendered list item (HTML-escaped). Mirrored by the
+ *  client-side DOM builder so a live poll rebuilds the same structure. */
+function renderSprintItem(s: SprintSummary): string {
+  const meta = [
+    s.rounds === null ? null : `${esc(s.rounds)} round${s.rounds === 1 ? "" : "s"}`,
+    s.score === null ? null : `score ${esc(s.score)}`,
+  ].filter((x) => x !== null).join(" · ");
+  const cur = s.current ? ` <span class="cur">← current</span>` : "";
+  const desc = s.description === null ? "" : `<div class="sprint-desc">${esc(s.description)}</div>`;
+  return (
+    `<li class="sprint${s.current ? " is-current" : ""}">` +
+    `<div class="sprint-head"><span class="sprint-title">#${esc(s.index)} ${orDash(s.title)}</span>${cur}` +
+    `${meta ? ` <span class="sprint-meta">${meta}</span>` : ""}</div>${desc}</li>`
+  );
+}
+
 function renderPage(data: DashboardData): string {
-  const scoresText =
-    data.scores.length === 0
-      ? "—"
-      : data.scores
-          .map((s) => (s.sprint === null ? `#? = ${s.score}` : `#${s.sprint} = ${s.score}`))
-          .join(", ");
-  const spend = data.budgetSpentUsd === null ? "—" : `$${esc(data.budgetSpentUsd)}`;
+  const finished = isFinished(data.status);
+  const spend = fmtSpend(data.budgetSpentUsd);
   const sprintLine =
     data.currentSprint === null
       ? "—"
-      : `#${esc(data.currentSprint)} ${orDash(data.currentSprintTitle)}`;
+      : `#${esc(data.currentSprint)}${data.totalSprints ? ` of ${esc(data.totalSprints)}` : ""} ${orDash(data.currentSprintTitle)}`;
+  const sprintList =
+    data.sprintBreakdown.length === 0
+      ? `<li class="sprint">—</li>`
+      : data.sprintBreakdown.map(renderSprintItem).join("");
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>dev-harness dashboard${data.runId ? " — " + esc(data.runId) : ""}</title>
 <style>
-  body { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin: 2rem; line-height: 1.5; }
-  h1 { font-size: 1.2rem; }
-  .field { margin: 0.25rem 0; }
-  .label { color: #666; display: inline-block; min-width: 11rem; }
-  pre.goal { white-space: pre-wrap; background: #f5f5f5; padding: 0.75rem; border-radius: 4px; }
+  :root { color-scheme: light dark; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    line-height: 1.5; margin: 0; padding: clamp(0.9rem, 4vw, 2rem);
+    max-width: 48rem; font-size: 16px; word-break: break-word;
+  }
+  h1 { font-size: clamp(1.05rem, 4.5vw, 1.3rem); margin: 0 0 0.75rem; }
+  h2 { font-size: 1rem; margin: 1.25rem 0 0.4rem; }
+  .field { display: flex; flex-wrap: wrap; gap: 0.15rem 0.6rem; margin: 0.4rem 0; }
+  .field > span { overflow-wrap: anywhere; min-width: 0; }
+  .label { color: #666; flex: 0 0 11rem; }
+  ol.sprints { list-style: none; padding: 0; margin: 0.25rem 0; }
+  .sprint { padding: 0.5rem 0.6rem; margin: 0.4rem 0; border-left: 3px solid #ddd; background: #fafafa; border-radius: 3px; }
+  .sprint.is-current { border-left-color: #2a7; background: #f0f8f4; }
+  .sprint-head { font-weight: 600; }
+  .sprint-meta { font-weight: 400; color: #666; }
+  .cur { color: #2a7; font-weight: 600; }
+  .sprint-desc { font-weight: 400; color: #555; font-size: 0.85rem; margin-top: 0.2rem; }
+  details.goal { margin-top: 0.25rem; }
+  details.goal summary { cursor: pointer; font-size: 1rem; font-weight: 600; }
+  pre.goal {
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    background: #f5f5f5; padding: 0.75rem; border-radius: 4px;
+    max-height: 45vh; overflow: auto; font-size: 0.85rem; margin-top: 0.5rem;
+  }
   .degraded { color: #b00; }
+  @media (max-width: 480px) {
+    .label { flex-basis: 100%; color: #888; font-size: 0.8rem; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111; color: #ddd; }
+    .label { color: #999; }
+    .sprint { background: #1a1a1a; border-left-color: #333; }
+    .sprint.is-current { background: #14241c; border-left-color: #2a7; }
+    .sprint-meta, .sprint-desc { color: #999; }
+    pre.goal { background: #1c1c1c; }
+    .degraded { color: #ff6b6b; }
+  }
 </style>
 </head>
 <body>
-<h1>dev-harness live run <span id="runId">${orDash(data.runId)}</span></h1>
+<h1>dev-harness run <span id="runId">${orDash(data.runId)}</span></h1>
 <div class="field"><span class="label">Status</span><span id="status">${orDash(data.status)}</span>
   <span id="degraded" class="degraded">${data.stale ? "(updating…)" : ""}</span></div>
-<div class="field"><span class="label">Current sprint</span><span id="currentSprint">${sprintLine}</span></div>
-<div class="field"><span class="label">Current round</span><span id="contractVersion">${orDash(data.contractVersion)}</span></div>
-<div class="field"><span class="label">Current step</span><span id="phase">${orDash(data.phase)}</span></div>
-<div class="field"><span class="label">Per-sprint scores</span><span id="scores">${esc(scoresText)}</span></div>
-<div class="field"><span class="label">Elapsed</span><span id="elapsed">${esc(formatElapsed(data.elapsedMs))}</span></div>
+<div class="field"><span class="label" id="lbl-sprint">${finished ? "Final sprint" : "Current sprint"}</span><span id="currentSprint">${sprintLine}</span></div>
+<div class="field"><span class="label" id="lbl-round">${finished ? "Final round" : "Current round"}</span><span id="contractVersion">${orDash(data.contractVersion)}</span></div>
+<div class="field"><span class="label" id="lbl-step">${finished ? "Final step" : "Current step"}</span><span id="phase">${orDash(data.phase)}</span></div>
+<div class="field"><span class="label" id="lbl-elapsed">${finished ? "Duration" : "Elapsed"}</span><span id="elapsed">${esc(formatElapsed(data.elapsedMs))}</span></div>
 <div class="field"><span class="label">Spend</span><span id="spend">${spend}</span></div>
 <div class="field"><span class="label">Halt reason</span><span id="haltReason">${orDash(data.haltReason)}</span></div>
 <div class="field"><span class="label">Freeze reason</span><span id="contractFreezeReason">${orDash(data.contractFreezeReason)}</span></div>
-<h2>Goal</h2>
+<h2>Sprints <span id="sprintCount">${data.totalSprints ? `(${esc(data.totalSprints)})` : ""}</span></h2>
+<ol class="sprints" id="sprintList">${sprintList}</ol>
+<details class="goal">
+<summary>Goal</summary>
 <pre class="goal" id="goal">${orDash(data.goal)}</pre>
+</details>
 <script>
 (function () {
   function fmtElapsed(ms) {
@@ -153,18 +219,50 @@ function renderPage(data: DashboardData): string {
   }
   function dash(v) { return (v === null || v === undefined) ? "—" : String(v); }
   function set(id, text) { var el = document.getElementById(id); if (el) el.textContent = text; }
+  function fmtSpend(v) { return (v === null || v === undefined) ? "—" : "$" + Number(v).toFixed(2); }
+  function finished(status) { return status === "passed" || status === "halted"; }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+  function buildSprints(rows) {
+    var list = document.getElementById("sprintList");
+    if (!list) return;
+    list.textContent = "";
+    if (!rows || rows.length === 0) { list.appendChild(el("li", "sprint", "—")); return; }
+    rows.forEach(function (s) {
+      var li = el("li", "sprint" + (s.current ? " is-current" : ""));
+      var head = el("div", "sprint-head");
+      head.appendChild(el("span", "sprint-title", "#" + s.index + " " + dash(s.title)));
+      if (s.current) { head.appendChild(document.createTextNode(" ")); head.appendChild(el("span", "cur", "← current")); }
+      var bits = [];
+      if (s.rounds !== null && s.rounds !== undefined) bits.push(s.rounds + " round" + (s.rounds === 1 ? "" : "s"));
+      if (s.score !== null && s.score !== undefined) bits.push("score " + s.score);
+      if (bits.length) { head.appendChild(document.createTextNode(" ")); head.appendChild(el("span", "sprint-meta", bits.join(" · "))); }
+      li.appendChild(head);
+      if (s.description !== null && s.description !== undefined) li.appendChild(el("div", "sprint-desc", s.description));
+      list.appendChild(li);
+    });
+  }
   function apply(d) {
+    var done = finished(d.status);
     set("runId", dash(d.runId));
     set("status", dash(d.status));
     set("degraded", d.stale ? "(updating…)" : "");
-    set("currentSprint", d.currentSprint === null ? "—" : "#" + d.currentSprint + " " + dash(d.currentSprintTitle));
+    set("lbl-sprint", done ? "Final sprint" : "Current sprint");
+    set("lbl-round", done ? "Final round" : "Current round");
+    set("lbl-step", done ? "Final step" : "Current step");
+    set("lbl-elapsed", done ? "Duration" : "Elapsed");
+    set("currentSprint", d.currentSprint === null ? "—"
+      : "#" + d.currentSprint + (d.totalSprints ? " of " + d.totalSprints : "") + " " + dash(d.currentSprintTitle));
     set("contractVersion", dash(d.contractVersion));
     set("phase", dash(d.phase));
-    set("scores", (d.scores && d.scores.length)
-      ? d.scores.map(function (s) { return (s.sprint === null ? "#?" : "#" + s.sprint) + " = " + s.score; }).join(", ")
-      : "—");
+    set("sprintCount", d.totalSprints ? "(" + d.totalSprints + ")" : "");
+    buildSprints(d.sprintBreakdown);
     set("elapsed", fmtElapsed(d.elapsedMs));
-    set("spend", d.budgetSpentUsd === null || d.budgetSpentUsd === undefined ? "—" : "$" + d.budgetSpentUsd);
+    set("spend", fmtSpend(d.budgetSpentUsd));
     set("haltReason", dash(d.haltReason));
     set("contractFreezeReason", dash(d.contractFreezeReason));
     set("goal", dash(d.goal));

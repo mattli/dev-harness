@@ -73,12 +73,50 @@ describe("assembleDashboardData — c2 field mapping on complete fixture", () =>
 
   test("exposes all the stable keys", () => {
     for (const key of [
-      "runId", "goal", "currentSprint", "currentSprintTitle", "contractVersion",
+      "runId", "goal", "currentSprint", "currentSprintTitle", "totalSprints",
+      "sprintBreakdown", "contractVersion",
       "phase", "status", "haltReason", "contractFreezeReason", "budgetSpentUsd",
       "startedAt", "elapsedMs", "scores", "degraded",
     ]) {
       expect(result).toHaveProperty(key);
     }
+  });
+});
+
+describe("assembleDashboardData — sprint breakdown (count, rounds, description, score)", () => {
+  const state = readJson(join(fx("complete"), "state.json"));
+  const result = assembleDashboardData(fx("complete"), NOW);
+
+  test("totalSprints equals the planned sprint count", () => {
+    expect(result.totalSprints).toBe(state.sprints.length);
+  });
+
+  test("one breakdown row per planned sprint, in order, with title + description", () => {
+    expect(result.sprintBreakdown).toHaveLength(state.sprints.length);
+    result.sprintBreakdown.forEach((row, i) => {
+      expect(row.index).toBe(i);
+      expect(row.title).toBe(state.sprints[i].title);
+      expect(row.description).toBe(state.sprints[i].description ?? null);
+    });
+  });
+
+  test("rounds = the frozen contractVersion on each sprint's NEGOTIATE event", () => {
+    const negBySprint = new Map<number, number>();
+    for (const l of readFileSync(join(fx("complete"), "trace.jsonl"), "utf8")
+      .split("\n").map((x) => x.trim()).filter(Boolean).map((x) => JSON.parse(x))) {
+      if (l.phase === "NEGOTIATE") negBySprint.set(l.sprint, l.contractVersion);
+    }
+    for (const row of result.sprintBreakdown) {
+      expect(row.rounds).toBe(negBySprint.has(row.index) ? negBySprint.get(row.index) : null);
+    }
+  });
+
+  test("score = the sprint's latest EVALUATE score; current flag marks currentSprint", () => {
+    // sprint 0 was evaluated 72 then 88 (retry) → latest 88; sprint 1 → 91.
+    const byIndex = Object.fromEntries(result.sprintBreakdown.map((r) => [r.index, r]));
+    expect(byIndex[0].score).toBe(88);
+    expect(byIndex[1].score).toBe(91);
+    expect(byIndex[state.currentSprint].current).toBe(true);
   });
 });
 
@@ -105,14 +143,30 @@ describe("assembleDashboardData — c3 per-sprint scores", () => {
 });
 
 describe("assembleDashboardData — c4 elapsedMs", () => {
-  test("computes now − Date.parse(startedAt) deterministically", () => {
+  test("a FINISHED run freezes elapsed at its real length (last trace ts − startedAt), not now", () => {
+    // complete fixture: status "passed", startedAt 10:00:00Z, last trace ts 10:00:08Z.
     const state = readJson(join(fx("complete"), "state.json"));
+    const started = Date.parse(state.startedAt);
+    const lastTs = Date.parse("2026-07-21T10:00:08.000Z");
     const r1 = assembleDashboardData(fx("complete"), NOW);
-    expect(r1.elapsedMs).toBe(NOW - Date.parse(state.startedAt));
+    expect(r1.elapsedMs).toBe(lastTs - started); // 8000ms — the actual duration
 
+    // Advancing the wall clock must NOT change a finished run's duration.
     const later = NOW + 60_000;
     const r2 = assembleDashboardData(fx("complete"), later);
-    expect(r2.elapsedMs).toBe(later - Date.parse(state.startedAt));
+    expect(r2.elapsedMs).toBe(r1.elapsedMs);
+  });
+
+  test("a LIVE run counts up: now − startedAt, and advances with the clock", () => {
+    // partial fixture: status "running".
+    const state = readJson(join(fx("partial"), "state.json"));
+    const started = Date.parse(state.startedAt);
+    const r1 = assembleDashboardData(fx("partial"), NOW);
+    expect(r1.elapsedMs).toBe(NOW - started);
+
+    const later = NOW + 60_000;
+    const r2 = assembleDashboardData(fx("partial"), later);
+    expect(r2.elapsedMs).toBe(later - started);
     expect(r2.elapsedMs).not.toBe(r1.elapsedMs);
   });
 
