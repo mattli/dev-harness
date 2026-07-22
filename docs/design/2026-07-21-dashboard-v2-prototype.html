@@ -1,0 +1,492 @@
+<title>dev-harness — run dashboard (prototype)</title>
+<style>
+  :root {
+    --bg: #f6f8fb;
+    --surface: #ffffff;
+    --surface-2: #eef1f6;
+    --border: #dde3ec;
+    --border-strong: #c6d0dd;
+    --text: #16202c;
+    --muted: #5b6675;
+    --faint: #93a0b0;
+    --accent: #2f6bff;
+    --accent-soft: #e4ecff;
+    --good: #1f9d63;
+    --good-soft: #dff3e8;
+    --warn: #c67f16;
+    --warn-soft: #f7ecd4;
+    --spine: #d4dbe6;
+    --shadow: 0 1px 2px rgba(20,32,48,.06), 0 6px 20px rgba(20,32,48,.05);
+    --radius: 12px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --surface: #171b21; --surface-2: #1e242c; --border: #262d37;
+      --border-strong: #333c48; --text: #e7ecf3; --muted: #96a1b1; --faint: #6a7686;
+      --accent: #5c92ff; --accent-soft: #17233d; --good: #46c288; --good-soft: #12271d;
+      --warn: #e0a13a; --warn-soft: #2a2113; --spine: #2c343f;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f6f8fb; --surface: #ffffff; --surface-2: #eef1f6; --border: #dde3ec;
+    --border-strong: #c6d0dd; --text: #16202c; --muted: #5b6675; --faint: #93a0b0;
+    --accent: #2f6bff; --accent-soft: #e4ecff; --good: #1f9d63; --good-soft: #dff3e8;
+    --warn: #c67f16; --warn-soft: #f7ecd4; --spine: #d4dbe6;
+    --shadow: 0 1px 2px rgba(20,32,48,.06), 0 6px 20px rgba(20,32,48,.05);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --surface: #171b21; --surface-2: #1e242c; --border: #262d37;
+    --border-strong: #333c48; --text: #e7ecf3; --muted: #96a1b1; --faint: #6a7686;
+    --accent: #5c92ff; --accent-soft: #17233d; --good: #46c288; --good-soft: #12271d;
+    --warn: #e0a13a; --warn-soft: #2a2113; --spine: #2c343f;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--sans); line-height: 1.55;
+    -webkit-text-size-adjust: 100%; -webkit-font-smoothing: antialiased;
+  }
+
+  /* prototype toolbar */
+  .proto-bar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: .85rem; flex-wrap: wrap;
+    padding: .7rem clamp(1rem, 4vw, 1.75rem);
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .proto-tag { font-family: var(--mono); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  .segmented { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px; }
+  .segmented button {
+    font-family: var(--mono); font-size: .74rem; border: 0; background: transparent; color: var(--muted);
+    padding: .38rem .78rem; border-radius: 999px; cursor: pointer; transition: color .15s, background .15s;
+  }
+  .segmented button:hover { color: var(--text); }
+  .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .segmented button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .wrap { max-width: 40rem; margin: 0 auto; padding: clamp(1.4rem, 4vw, 2.25rem) clamp(1rem, 4vw, 1.75rem) 4rem; }
+
+  /* header */
+  .run-head { margin-bottom: 1.3rem; }
+  .context-strip { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
+  .repo { font-family: var(--mono); font-size: .9rem; font-weight: 600; color: var(--text); }
+  .run-id-tag { font-family: var(--mono); font-size: .74rem; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: .12rem .5rem; }
+  .id-key { color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-size: .63rem; margin-right: .32rem; }
+  .context-strip .pill { margin-left: auto; }
+  .pill {
+    font-family: var(--mono); font-size: .72rem; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
+    padding: .2rem .6rem; border-radius: 999px; display: inline-flex; align-items: center; gap: .4rem;
+  }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.passed  { color: var(--good); background: var(--good-soft); }
+  .pill.running { color: var(--accent); background: var(--accent-soft); }
+  .pill.halted  { color: var(--warn); background: var(--warn-soft); }
+  .pill.planning{ color: var(--muted); background: var(--surface-2); }
+  .pill.running::before, .pill.planning::before { animation: pulse 1.6s ease-in-out infinite; }
+
+  /* goal area */
+  .goal-area { margin: 0 0 1.7rem; }
+  .goal-eyebrow { font-family: var(--mono); font-size: .66rem; letter-spacing: .13em; text-transform: uppercase; color: var(--faint); margin-bottom: .45rem; }
+  .goal-line { font-family: var(--sans); font-size: 1.3rem; font-weight: 650; line-height: 1.32; letter-spacing: -.012em; margin: 0 0 .7rem; text-wrap: balance; }
+  .goal-link {
+    font-family: var(--sans); font-size: .88rem; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer;
+    display: inline-flex; align-items: center; gap: .2rem;
+  }
+  .goal-link:hover { text-decoration: underline; }
+  .goal-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+  .goal-link.small { font-size: .8rem; color: var(--muted); }
+  .goal-link.small:hover { color: var(--accent); }
+
+  /* run progress strip */
+  .run-strip { position: relative; display: flex; width: 100%; margin: 0 0 1.7rem; }
+  .run-strip::before, .run-strip::after { content: ""; position: absolute; top: 13px; height: 2px; border-radius: 2px; }
+  .run-strip::before { left: 16.667%; right: 16.667%; background: var(--spine); }
+  .run-strip::after { left: 16.667%; width: calc(66.666% * var(--progress, 0)); background: var(--fill, var(--accent)); transition: width .3s ease; }
+  .stage { flex: 1; display: flex; flex-direction: column; align-items: center; gap: .6rem; position: relative; z-index: 1; }
+  .stage-node {
+    width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+    font-size: .72rem; background: var(--surface); border: 2px solid var(--border-strong); color: var(--muted); position: relative;
+  }
+  .stage.done .stage-node    { background: var(--good); border-color: var(--good); color: #fff; }
+  .stage.current .stage-node { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 5px var(--accent-soft); }
+  .stage.stopped .stage-node,
+  .stage.paused .stage-node  { background: var(--warn); border-color: var(--warn); color: #fff; }
+  .stage.current .stage-node::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--accent); opacity: .5; animation: ring 1.8s ease-out infinite; }
+  .stage-label { font-family: var(--mono); font-size: .74rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .stage.current .stage-label { color: var(--accent); font-weight: 600; }
+  .stage.done .stage-label { color: var(--text); }
+  .stage.paused .stage-label { color: var(--warn); font-weight: 600; }
+
+  /* stats */
+  .stats { display: grid; gap: .75rem; margin-bottom: 1.9rem; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .9rem 1rem; box-shadow: var(--shadow); }
+  .tile-label { font-family: var(--mono); font-size: .64rem; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: .4rem; }
+  .tile-value { font-family: var(--mono); font-size: 1.2rem; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .tile-value .sub { color: var(--faint); font-weight: 400; }
+
+  /* callouts */
+  .callout { display: flex; gap: .6rem; align-items: flex-start; border-radius: 10px; padding: .8rem .9rem; font-size: .88rem; color: var(--text); margin-bottom: 1.6rem; }
+  .callout[hidden] { display: none; }
+  .halt-note { background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+  .halt-note b { color: var(--warn); font-family: var(--mono); font-weight: 600; }
+  .out-note { background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); }
+  .out-key { font-family: var(--mono); font-size: .64rem; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding-top: .12rem; }
+  .out-note b { font-family: var(--mono); color: var(--accent); }
+  .reason-picker { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-bottom: .85rem; }
+  .reason-picker[hidden] { display: none; }
+  .reason-chip { font-family: var(--mono); font-size: .68rem; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); border-radius: 999px; padding: .2rem .55rem; cursor: pointer; }
+  .reason-chip[aria-pressed="true"] { background: var(--warn-soft); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+  .reason-chip:hover { color: var(--text); }
+  .reason-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* stepper */
+  .steps-title { font-family: var(--mono); font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin: 0 0 1rem; }
+  .steps { position: relative; }
+  .step { position: relative; display: grid; grid-template-columns: 32px 1fr; gap: 1rem; }
+  .step::before { content: ""; position: absolute; left: 15px; top: 30px; bottom: -.2rem; width: 2px; background: var(--spine); }
+  .step:last-child::before { display: none; }
+  .step.done::before { background: var(--good); }
+  .node {
+    width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+    font-family: var(--mono); font-size: .82rem; font-weight: 600; position: relative; z-index: 1;
+    background: var(--surface); border: 2px solid var(--border-strong); color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .step.done .node    { background: var(--good); border-color: var(--good); color: #fff; }
+  .step.running .node { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 4px var(--accent-soft); }
+  .step.halted .node  { background: var(--warn); border-color: var(--warn); color: #fff; }
+  .step.running .node::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--accent); opacity: .5; animation: ring 1.8s ease-out infinite; }
+  .step-body { padding-bottom: 1.7rem; min-width: 0; }
+  .step-head { display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
+  .step-title { font-weight: 600; font-size: 1rem; letter-spacing: -.01em; }
+  .step.pending .step-title { color: var(--muted); }
+  .step-meta { margin-left: auto; font-family: var(--mono); font-size: .8rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .score { font-weight: 600; padding: .05rem .34rem; border-radius: 5px; }
+  .score.good { color: var(--good); background: var(--good-soft); }
+  .score.warn { color: var(--warn); background: var(--warn-soft); }
+  .step-desc { color: var(--muted); font-size: .88rem; margin-top: .4rem; line-height: 1.5; }
+  .step.pending .step-desc { color: var(--faint); }
+  .step-metrics { margin-top: .65rem; font-family: var(--mono); font-size: .74rem; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.5; }
+  .pipe {
+    margin-top: .9rem; display: flex; align-items: center; gap: .35rem; flex-wrap: wrap;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: .65rem .7rem;
+  }
+  .phase { display: flex; align-items: center; gap: .32rem; font-family: var(--mono); font-size: .74rem; color: var(--faint); }
+  .phase .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); flex: none; }
+  .phase.done { color: var(--muted); } .phase.done .dot { background: var(--good); }
+  .phase.active { color: var(--accent); font-weight: 600; } .phase.active .dot { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  .phase.stopped { color: var(--warn); font-weight: 600; } .phase.stopped .dot { background: var(--warn); }
+  .pipe .arrow { color: var(--faint); font-size: .7rem; }
+  .pipe .round { margin-left: auto; font-family: var(--mono); font-size: .72rem; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: .12rem .55rem; }
+
+  .planning-card {
+    display: flex; align-items: center; gap: .8rem;
+    background: var(--surface); border: 1px dashed var(--border-strong);
+    border-radius: var(--radius); padding: 1.25rem; color: var(--muted); font-size: .92rem;
+  }
+  .spin { width: 17px; height: 17px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent); animation: spin .8s linear infinite; flex: none; }
+
+  /* full-goal page */
+  .goal-page .back-link { font-family: var(--mono); font-size: .8rem; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; margin-bottom: 1.75rem; }
+  .goal-page .back-link:hover { text-decoration: underline; }
+  .goal-doc h1 { font-size: 1.5rem; letter-spacing: -.02em; margin: 0 0 .5rem; }
+  .goal-doc .lead { font-size: 1.05rem; color: var(--text); margin: 0 0 1.75rem; line-height: 1.5; }
+  .goal-doc h2 { font-family: var(--mono); font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 1.9rem 0 .7rem; }
+  .goal-doc p { margin: 0 0 1rem; max-width: 60ch; }
+  .goal-doc ul { margin: 0 0 1rem; padding-left: 1.2rem; }
+  .goal-doc li { margin: .35rem 0; max-width: 58ch; }
+
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @keyframes ring { 0% { transform: scale(1); opacity: .5; } 100% { transform: scale(1.5); opacity: 0; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="proto-bar">
+  <span class="proto-tag">Prototype · preview state</span>
+  <div class="segmented" id="switcher" role="group" aria-label="Preview run state">
+    <button data-state="planning">Planning</button>
+    <button data-state="running">Live</button>
+    <button data-state="passed" aria-pressed="true">Passed</button>
+    <button data-state="halted">Halted</button>
+  </div>
+</div>
+
+<main class="wrap" id="mainView">
+  <header class="run-head">
+    <div class="context-strip">
+      <span class="repo" id="repo">dev-harness</span>
+      <span class="run-id-tag"><span class="id-key">Run ID:</span><span id="runId">mruxypns</span></span>
+      <span class="pill passed" id="statusPill">passed</span>
+    </div>
+  </header>
+
+  <div class="run-strip" id="runStrip"></div>
+
+  <div class="goal-area" id="goalArea"></div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="reason-picker" id="reasonPicker" hidden></div>
+  <div class="callout halt-note" id="haltNote" hidden></div>
+
+  <div class="steps-title" id="stepsTitle">Sprints</div>
+  <section class="steps" id="steps"></section>
+
+  <div class="callout out-note" id="outNote" hidden></div>
+</main>
+
+<main class="wrap goal-page" id="goalPage" hidden>
+  <button type="button" class="back-link" id="backLink">← Back to run</button>
+  <div class="goal-doc">
+    <h1>Goal</h1>
+    <p class="lead">Build a read-only local web dashboard for the active or most recent dev-harness run.</p>
+    <h2>What it does</h2>
+    <p>Serves a single page showing the live state of a run, rendering only data that already exists in the run folder. The page updates in place via polling — a continuously live view with no visible reload — and never writes to the run folder or any config.</p>
+    <h2>What it shows</h2>
+    <ul>
+      <li>The goal, and the current sprint / round / step</li>
+      <li>Per-sprint scores</li>
+      <li>Elapsed wall-clock time</li>
+      <li>Spend, when it's recorded</li>
+    </ul>
+    <h2>Constraints</h2>
+    <ul>
+      <li>Stdlib-only server — no new dependencies</li>
+      <li>Strictly read-only — never writes to the run folder or any config</li>
+      <li>Degrades gracefully when fields are missing or a run is mid-write</li>
+    </ul>
+    <h2>Out of scope (stage 2)</h2>
+    <ul>
+      <li>True push streaming (SSE / WebSocket)</li>
+      <li>Launch / stop controls and config editing</li>
+    </ul>
+  </div>
+</main>
+
+<script>
+(function () {
+  var PHASES = ["Negotiate", "Generate", "Evaluate", "Decide"];
+  var REPO = "dev-harness";
+  var ONE_LINE = "Build a read-only local web dashboard for the active or most recent dev-harness run.";
+
+  var SPRINTS = [
+    { title: "Run-folder reader & data assembly",
+      desc: "Read state.json and trace.jsonl into one display model, degrading gracefully when a run is mid-write." },
+    { title: "HTTP server & data / page endpoints",
+      desc: "Serve the page and a JSON data endpoint over Node's built-in http — import-safe, with no side effects." },
+    { title: "Live polling page & acceptance",
+      desc: "A page that polls the data endpoint and updates in place — no reload — covered by hermetic and fetch-level tests." }
+  ];
+
+  var STATES = {
+    planning: {
+      status: "planning", runId: "mv0k3p2q", planning: true
+    },
+    running: {
+      status: "running", runId: "mv0k3p2q", sprintText: '2<span class="sub"> / 3</span>',
+      duration: "12:07", spend: "$4.10", tick: true,
+      sprints: [
+        { state: "done", rounds: 5, attempts: 1, edits: 5, cost: "$4.07", score: 96 },
+        { state: "running", activePhase: 1, rounds: 2, attempts: 1, edits: 7, cost: "$2.10" },
+        { state: "pending" }
+      ]
+    },
+    passed: {
+      status: "passed", runId: "mruxypns", sprintText: '3<span class="sub"> / 3</span>',
+      duration: "32:49", spend: "$12.38",
+      sprints: [
+        { state: "done", rounds: 5, attempts: 1, edits: 5, cost: "$4.07", score: 96 },
+        { state: "done", rounds: 2, attempts: 1, edits: 3, cost: "$2.68", score: 96 },
+        { state: "done", rounds: 3, attempts: 1, edits: 11, cost: "$5.63", score: 96 }
+      ]
+    },
+    halted: {
+      status: "halted", runId: "mv0k3p2q", sprintText: '2<span class="sub"> / 3</span>',
+      duration: "30:14", spend: "$8.90",
+      sprints: [
+        { state: "done", rounds: 5, attempts: 1, edits: 5, cost: "$4.07", score: 96 },
+        { state: "halted", activePhase: 2, rounds: 3, attempts: 3, edits: 24, cost: "$6.80", best: 72 },
+        { state: "pending" }
+      ]
+    }
+  };
+
+  // The real haltReason codes (src/budget/tracker.ts StopReason + the parse-error
+  // fault), each mapped to a plain-language sentence — the "product surface, not a
+  // debug log" translation.
+  var HALT_ORDER = ["wall-clock", "max-iteration", "no-progress", "usage-limit", "dollar-ceiling", "evaluator-parse-error"];
+  var HALT_REASONS = {
+    "wall-clock":            { label: "Paused",  text: "Reached the 30-minute limit for this sprint. Paused, not failed — the partial work is committed to the run branch." },
+    "max-iteration":         { label: "Paused",  text: "Used all its attempts on this sprint (6 tries) without clearing the score bar. Paused — partial work is saved." },
+    "no-progress":           { label: "Paused",  text: "The score stopped improving across several attempts, so it stopped rather than spin. Paused — partial work is saved." },
+    "usage-limit":           { label: "Paused",  text: "Hit your Claude subscription's usage limit. Paused — pick back up when the limit resets." },
+    "dollar-ceiling":        { label: "Paused",  text: "Reached the spending limit you set for this run. Paused — partial work is saved." },
+    "evaluator-parse-error": { label: "Stopped", text: "The grader returned an unreadable score, so the run stopped to be safe. This is a fault, not a normal pause." }
+  };
+  var haltKey = "wall-clock";
+
+  var STRIP_LABELS = ["Plan", "Generate", "Done"];
+  var STRIP = {
+    planning: { stages: ["current", "pending", "pending"], progress: 0, fill: "var(--accent)" },
+    running:  { stages: ["done", "current", "pending"],    progress: 0.5, fill: "var(--accent)" },
+    passed:   { stages: ["done", "done", "done"],          progress: 1, fill: "var(--good)" },
+    halted:   { stages: ["done", "stopped", "paused"],     progress: 1, fill: "var(--warn)" }
+  };
+
+  var el = document.getElementById.bind(document);
+  var tickTimer = null;
+
+  function tileHTML(label, valueHTML, id) {
+    return '<div class="tile"><div class="tile-label">' + label + '</div><div class="tile-value" id="' + id + '">' + valueHTML + '</div></div>';
+  }
+  function scoreChip(score) { return '<span class="score ' + (score >= 85 ? "good" : "warn") + '">' + score + '</span>'; }
+  function nodeGlyph(cls) { return cls === "done" ? "✓" : (cls === "paused" ? "❚❚" : ""); }
+
+  function buildStrip(key) {
+    var cfg = STRIP[key];
+    var strip = el("runStrip");
+    strip.style.setProperty("--progress", cfg.progress);
+    strip.style.setProperty("--fill", cfg.fill);
+    strip.innerHTML = cfg.stages.map(function (cls, i) {
+      return '<div class="stage ' + cls + '"><span class="stage-node">' + nodeGlyph(cls) + '</span><span class="stage-label">' + STRIP_LABELS[i] + '</span></div>';
+    }).join("");
+  }
+
+  function pipeHTML(sp) {
+    var active = sp.activePhase, stopped = sp.state === "halted";
+    var parts = PHASES.map(function (name, i) {
+      var cls = i < active ? "done" : (i === active ? (stopped ? "stopped" : "active") : "");
+      return '<span class="phase ' + cls + '"><span class="dot"></span>' + name + (i < active ? " ✓" : "") + '</span>';
+    });
+    return '<div class="pipe">' + parts.join('<span class="arrow">→</span>') + '</div>';
+  }
+
+  function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
+  function metricsLine(sp) {
+    var bits = [];
+    if (sp.rounds != null) bits.push(plural(sp.rounds, "negotiation round"));
+    if (sp.attempts != null) bits.push(plural(sp.attempts, "build attempt"));
+    if (sp.edits != null) bits.push(plural(sp.edits, "file edit"));
+    if (sp.cost) bits.push(sp.cost);
+    return bits.length ? '<div class="step-metrics">' + bits.join(" · ") + '</div>' : "";
+  }
+
+  function stepHTML(n, sp) {
+    var s = SPRINTS[n], st = sp.state;
+    var node = st === "done" ? "✓" : (st === "halted" ? "❚❚" : (n + 1));
+    var headRight = st === "done" ? '<span class="step-meta">' + scoreChip(sp.score) + '</span>'
+      : (st === "halted" ? '<span class="step-meta">best ' + scoreChip(sp.best) + '</span>' : "");
+    var pipe = (st === "running" || st === "halted") ? pipeHTML(sp) : "";
+    return '<div class="step ' + st + '"><div class="node">' + node + '</div><div class="step-body">' +
+      '<div class="step-head"><span class="step-title">' + s.title + '</span>' + headRight + '</div>' +
+      '<div class="step-desc">' + s.desc + '</div>' + pipe + metricsLine(sp) + '</div></div>';
+  }
+
+  function renderGoalArea(d) {
+    var area = el("goalArea");
+    if (d.planning) {
+      area.innerHTML = '<div class="goal-eyebrow">Goal</div><p class="goal-line">' + ONE_LINE + '</p>' +
+        '<button type="button" class="goal-link" id="viewGoal">View full goal ↗</button>';
+    } else {
+      area.innerHTML = '<button type="button" class="goal-link small" id="viewGoal">View goal ↗</button>';
+    }
+    el("viewGoal").addEventListener("click", showGoalPage);
+  }
+
+  function render(key) {
+    var d = STATES[key];
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+
+    el("runId").textContent = d.runId;
+    el("repo").textContent = REPO;
+    var pill = el("statusPill");
+    pill.className = "pill " + d.status;
+    pill.textContent = d.status;
+
+    renderGoalArea(d);
+    buildStrip(key);
+
+    var tiles = [];
+    if (!d.planning) {
+      var durLabel = d.status === "running" ? "Elapsed" : "Duration";
+      tiles.push(tileHTML("Sprint", d.sprintText, "tileSprint"));
+      tiles.push(tileHTML(durLabel, d.duration, "tileDuration"));
+      tiles.push(tileHTML("Spend", d.spend, "tileSpend"));
+    }
+    var stats = el("stats");
+    stats.style.gridTemplateColumns = "repeat(" + Math.max(tiles.length, 1) + ", 1fr)";
+    stats.innerHTML = tiles.join("");
+
+    var picker = el("reasonPicker"), haltNote = el("haltNote");
+    if (d.status === "halted") {
+      picker.hidden = false;
+      picker.innerHTML = '<span class="proto-tag">Preview halt reason</span>' + HALT_ORDER.map(function (k) {
+        return '<button type="button" class="reason-chip" data-reason="' + k + '" aria-pressed="' + (k === haltKey) + '">' + k + '</button>';
+      }).join("");
+      var r = HALT_REASONS[haltKey];
+      haltNote.hidden = false;
+      haltNote.innerHTML = '<b>' + r.label + '</b><span>' + r.text + '</span>';
+    } else {
+      picker.hidden = true;
+      haltNote.hidden = true;
+    }
+
+    var outNote = el("outNote");
+    if (d.status === "passed" || d.status === "halted") {
+      outNote.hidden = false;
+      var tail = d.status === "passed"
+        ? "ready to review — nothing was merged."
+        : "partial work committed — review before merging, nothing was merged.";
+      outNote.innerHTML = '<span class="out-key">Output</span><span>branch <b>run-' + d.runId + '</b> in ' + REPO + ', ' + tail + '</span>';
+    } else { outNote.hidden = true; }
+
+    var steps = el("steps"), title = el("stepsTitle");
+    if (d.planning) {
+      title.textContent = "Sprints";
+      steps.innerHTML = '<div class="planning-card"><span class="spin"></span>Breaking the goal into sprints… the plan appears here once the planner finishes.</div>';
+    } else {
+      title.textContent = "Sprints (" + d.sprints.length + ")";
+      steps.innerHTML = d.sprints.map(function (sp, i) { return stepHTML(i, sp); }).join("");
+      if (d.tick) startTick(d.duration, d.spend);
+    }
+  }
+
+  function startTick(durStr, spendStr) {
+    var p = durStr.split(":"), secs = parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+    var spend = parseFloat(spendStr.replace("$", ""));
+    tickTimer = setInterval(function () {
+      secs += 1; spend += 0.004;
+      var m = Math.floor(secs / 60), s = secs % 60;
+      if (el("tileDuration")) el("tileDuration").textContent = m + ":" + (s < 10 ? "0" : "") + s;
+      if (el("tileSpend")) el("tileSpend").textContent = "$" + spend.toFixed(2);
+    }, 1000);
+  }
+
+  el("reasonPicker").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    haltKey = b.getAttribute("data-reason");
+    render("halted");
+  });
+
+  function showGoalPage() { el("mainView").hidden = true; el("goalPage").hidden = false; window.scrollTo(0, 0); }
+  function showRun() { el("goalPage").hidden = true; el("mainView").hidden = false; window.scrollTo(0, 0); }
+  el("backLink").addEventListener("click", showRun);
+
+  var switcher = el("switcher");
+  switcher.addEventListener("click", function (e) {
+    var btn = e.target.closest("button"); if (!btn) return;
+    [].forEach.call(switcher.querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
+    showRun();
+    render(btn.getAttribute("data-state"));
+  });
+
+  render("passed");
+})();
+</script>
