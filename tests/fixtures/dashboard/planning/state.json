@@ -1,0 +1,17 @@
+{
+  "runId": "mv0k3p2q",
+  "goal": "---\ntype: dev-harness-goal\n---\n# Goal: ship the thing\nBuild a read-only local web dashboard for the active or most recent dev-harness run.",
+  "title": "ship the thing",
+  "startedAt": "2026-07-21T10:00:00.000Z",
+  "status": "running",
+  "sprints": [],
+  "currentSprint": 0,
+  "contractVersion": 0,
+  "scores": [],
+  "iterations": 0,
+  "budgetSpentUsd": 0.0,
+  "haltReason": null,
+  "runDir": "runs/dev-harness/2026-07-21-ship-the-thing",
+  "projectPath": "/Users/mattli/development/dev-harness",
+  "contractFreezeReason": null
+}

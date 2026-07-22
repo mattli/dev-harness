@@ -1,0 +1,21 @@
+{
+  "runId": "mv0k3p2q",
+  "goal": "---\ntype: dev-harness-goal\n---\n# Goal: ship the thing\nBuild a read-only local web dashboard for the active or most recent dev-harness run.\n\n## Requirements\n\n- Read state.json and trace.jsonl only.\n- Never write to the run folder.\n- Poll for updates in place.",
+  "title": "ship the thing",
+  "startedAt": "2026-07-21T10:00:00.000Z",
+  "status": "running",
+  "sprints": [
+    { "id": 0, "title": "Run-folder reader & data assembly", "description": "Read state.json and trace.jsonl into one display model." },
+    { "id": 1, "title": "HTTP server & data / page endpoints", "description": "Serve the page and a JSON data endpoint over Node's built-in http." },
+    { "id": 2, "title": "Live polling page & acceptance", "description": "A page that polls the data endpoint and updates in place." }
+  ],
+  "currentSprint": 1,
+  "contractVersion": 2,
+  "scores": [96],
+  "iterations": 0,
+  "budgetSpentUsd": 6.17,
+  "haltReason": null,
+  "runDir": "runs/dev-harness/2026-07-21-ship-the-thing",
+  "projectPath": "/Users/mattli/development/dev-harness",
+  "contractFreezeReason": "agreement"
+}

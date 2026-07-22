@@ -1,0 +1,6 @@
+{"ts":"2026-07-21T10:00:01.000Z","runId":"mv0k3p2q","sprint":0,"phase":"PLAN","agentRole":"planner","contractVersion":1,"inputDigest":"a","toolCalls":[],"outputDigest":"b","tokens":100,"costUsd":0.01}
+{"ts":"2026-07-21T10:00:02.000Z","runId":"mv0k3p2q","sprint":0,"phase":"NEGOTIATE","agentRole":"generator","contractVersion":5,"inputDigest":"a","toolCalls":[],"outputDigest":"b","tokens":200,"costUsd":0.02}
+{"ts":"2026-07-21T10:00:03.000Z","runId":"mv0k3p2q","sprint":0,"phase":"GENERATE","agentRole":"generator","contractVersion":5,"inputDigest":"a","toolCalls":["Write","Edit","Edit","Edit","Edit","Edit"],"outputDigest":"b","tokens":300,"costUsd":4.04}
+{"ts":"2026-07-21T10:00:04.000Z","runId":"mv0k3p2q","sprint":0,"phase":"EVALUATE","agentRole":"evaluator","contractVersion":5,"inputDigest":"a","toolCalls":[],"outputDigest":"b","tokens":150,"costUsd":0.01,"score":96}
+{"ts":"2026-07-21T10:00:05.000Z","runId":"mv0k3p2q","sprint":1,"phase":"NEGOTIATE","agentRole":"generator","contractVersion":2,"inputDigest":"a","toolCalls":[],"outputDigest":"b","tokens":200,"costUsd":0.02}
+{"ts":"2026-07-21T10:00:06.000Z","runId":"mv0k3p2q","sprint":1,"phase":"GENERATE","agentRole":"generator","contractVersion":2,"inputDigest":"a","toolCalls":["Write","Edit","Edit","Edit","Edit","Edit","Edit","Edit"],"outputDigest":"b","tokens":300,"costUsd":2.08}
