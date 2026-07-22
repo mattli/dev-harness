@@ -1,0 +1,18 @@
+{
+  "runId": "fallback1",
+  "goal": "# Goal: exercise the state.scores[] fallback",
+  "title": "fallback run",
+  "startedAt": "2026-07-21T08:00:00.000Z",
+  "status": "running",
+  "sprints": [
+    { "id": 0, "title": "Sprint zero", "description": "s0" },
+    { "id": 1, "title": "Sprint one", "description": "s1" }
+  ],
+  "currentSprint": 0,
+  "contractVersion": 1,
+  "scores": [55, 63, 70],
+  "iterations": 3,
+  "budgetSpentUsd": 0.9,
+  "haltReason": null,
+  "contractFreezeReason": null
+}

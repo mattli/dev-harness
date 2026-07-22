@@ -1,0 +1,6 @@
+{
+  "runId": "midwrite",
+  "goal": "# Goal: caught mid-write",
+  "status": "running",
+  "sprints": [
+    { "id": 0, "title": "half a

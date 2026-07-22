@@ -1,0 +1,16 @@
+{
+  "runId": "oldrun1",
+  "goal": "# Goal: an older run without the newer optional fields",
+  "title": "older run",
+  "startedAt": "2026-07-21T09:00:00.000Z",
+  "status": "running",
+  "sprints": [
+    { "id": 0, "title": "Only sprint", "description": "do the thing" }
+  ],
+  "currentSprint": 0,
+  "contractVersion": 1,
+  "scores": [],
+  "iterations": 1,
+  "haltReason": null,
+  "contractFreezeReason": null
+}

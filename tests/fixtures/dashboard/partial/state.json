@@ -1,0 +1,21 @@
+{
+  "runId": "mru5b2o4",
+  "goal": "---\ntype: dev-harness-goal\n---\n# Goal: ship the thing\nBuild the read-only dashboard.",
+  "title": "ship the thing",
+  "startedAt": "2026-07-21T10:00:00.000Z",
+  "status": "running",
+  "sprints": [
+    { "id": 0, "title": "Run-folder reader & data assembly", "description": "assemble live state" },
+    { "id": 1, "title": "HTTP server & page", "description": "serve the page" },
+    { "id": 2, "title": "Polling client", "description": "poll the endpoint" }
+  ],
+  "currentSprint": 1,
+  "contractVersion": 2,
+  "scores": [72],
+  "iterations": 2,
+  "budgetSpentUsd": 0.34,
+  "haltReason": null,
+  "runDir": "runs/dev-harness/2026-07-21-ship-the-thing",
+  "projectPath": "/Users/mattli/development/dev-harness",
+  "contractFreezeReason": "agreement"
+}
