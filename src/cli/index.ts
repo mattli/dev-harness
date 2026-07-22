@@ -5,7 +5,7 @@ import { runLoop } from "../orchestrator/run.js";
 import { wireDeps } from "./wire.js";
 import { renderSummary } from "../report/summary.js";
 import { latestRunSummary } from "../report/show.js";
-import { buildRunOverrides } from "./overrides.js";
+import { buildRunOverrides, dashboardBanner } from "./overrides.js";
 
 const program = new Command();
 program
@@ -21,6 +21,8 @@ program
     const runId = `${Date.now().toString(36)}`;
     const config = loadConfig(buildRunOverrides(opts, runId));
     console.log(`[dev-harness] run ${runId} — goal: ${config.goal}`);
+    const banner = dashboardBanner();
+    if (banner) console.log(banner);
     const state = await runLoop(config, wireDeps(config, query as any));
     console.log("\n" + renderSummary(state));
   });
