@@ -70,13 +70,19 @@ describe("dashboard server — c2 GET / returns 200 HTML", () => {
     expect(body).toContain("<body");
   });
 
-  test("the page is populated from the fixture (goal, sprint title, a score)", async () => {
+  test("the page is populated from the fixture (repo, sprint title, a score)", async () => {
     const dir = fx("complete");
     const state = readJson(join(dir, "state.json"));
     const s = await launch(dir);
     const body = await (await fetch(`${s.url}/`)).text();
-    // Goal text (its human line) is rendered.
-    expect(body).toContain("Build the read-only dashboard.");
+    // The goal-first header leads with the repo name (basename of projectPath),
+    // derived — never hardcoded.
+    expect(body).toContain("dev-harness");
+    // The reachable full-goal view carries the verbatim one-line goal (the "/"
+    // page links to it rather than inlining the whole goal).
+    expect(body).toMatch(/href=["']\/goal["']/);
+    const goalPage = await (await fetch(`${s.url}/goal`)).text();
+    expect(goalPage).toContain("Build the read-only dashboard.");
     // Current sprint title (HTML-escaped in the served markup, so compare the
     // escaped form — the title "HTTP server & page" renders with &amp;).
     const escTitle = state.sprints[state.currentSprint].title.replace(/&/g, "&amp;");

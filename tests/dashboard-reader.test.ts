@@ -309,3 +309,62 @@ describe("fixtures — c7 presence & readability", () => {
     expect(lines.some((e) => e.phase === "EVALUATE")).toBe(false);
   });
 });
+
+describe("assembleDashboardData — v2 derivations (oneLineGoal, repoName)", () => {
+  test("oneLineGoal is lifted verbatim, stripping YAML frontmatter and the '#' heading", () => {
+    const result = assembleDashboardData(fx("planning"), NOW);
+    expect(result.oneLineGoal).toBe(
+      "Build a read-only local web dashboard for the active or most recent dev-harness run.",
+    );
+    expect(result.oneLineGoal).not.toContain("---");
+    expect(result.oneLineGoal).not.toMatch(/^#/);
+  });
+
+  test("repoName is the basename of state.projectPath, not the full path", () => {
+    const result = assembleDashboardData(fx("running"), NOW);
+    expect(result.repoName).toBe("dev-harness");
+  });
+
+  test("repoName falls back to the served run-folder basename when state is corrupt", () => {
+    const result = assembleDashboardData(fx("corrupt"), NOW);
+    expect(result.degraded).toBe(true);
+    // No projectPath is readable from a corrupt state, so the served folder's
+    // basename ("corrupt") is used rather than throwing or emitting null.
+    expect(result.repoName).toBe("corrupt");
+  });
+});
+
+describe("assembleDashboardData — c5 per-sprint metrics derived from the trace", () => {
+  test("halted fixture: build attempts = GENERATE-event count, edits = 'Edit' toolCalls, NOT state.iterations", () => {
+    const state = readJson(join(fx("halted"), "state.json"));
+    const result = assembleDashboardData(fx("halted"), NOW);
+    const sprint1 = result.sprintBreakdown[1];
+
+    // state.iterations is the known-stale value the metrics must NOT use.
+    expect(state.iterations).toBe(0);
+    // Three GENERATE events for sprint 1 → 3 build attempts (derived).
+    expect(sprint1.attempts).toBe(3);
+    expect(sprint1.attempts).not.toBe(state.iterations);
+    // 8 + 8 + 8 "Edit" entries across those GENERATE events → 24 file edits.
+    expect(sprint1.edits).toBe(24);
+    // Rounds = the frozen contractVersion on the NEGOTIATE event (3 rounds).
+    expect(sprint1.rounds).toBe(3);
+    // Cost = the sum of costUsd across the sprint's trace events.
+    expect(sprint1.cost).toBeGreaterThan(0);
+  });
+
+  test("halted current sprint reports state 'halted' and its BEST score (not the last)", () => {
+    const result = assembleDashboardData(fx("halted"), NOW);
+    const sprint1 = result.sprintBreakdown[1];
+    expect(sprint1.state).toBe("halted");
+    // EVALUATE scores were 61, 72, 70 → best 72, even though 70 came last.
+    expect(sprint1.score).toBe(72);
+  });
+
+  test("running fixture marks the current sprint 'running' with an active phase index", () => {
+    const result = assembleDashboardData(fx("running"), NOW);
+    const current = result.sprintBreakdown[result.currentSprint as number];
+    expect(current.state).toBe("running");
+    expect(typeof current.activePhase).toBe("number");
+  });
+});
