@@ -524,7 +524,7 @@ function renderPage(data: DashboardData): string {
   .stage.paused .stage-label { color:var(--warn); font-weight:600; }
   .goal-area { margin:0 0 1.7rem; }
   .goal-eyebrow { font-family:var(--mono); font-size:.66rem; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin-bottom:.45rem; }
-  .goal-line { font-family:var(--sans); font-size:1.3rem; font-weight:650; line-height:1.32; letter-spacing:-.012em; margin:0 0 .7rem; text-wrap:balance; }
+  .goal-line { font-family:var(--sans); font-size:1.3rem; font-weight:650; line-height:1.32; letter-spacing:-.012em; margin:0 0 .7rem; text-wrap:pretty; }
   .goal-link { font-family:var(--sans); font-size:.88rem; color:var(--accent); text-decoration:none; display:inline-flex; align-items:center; gap:.2rem; }
   .goal-link:hover { text-decoration:underline; }
   .goal-link.small { font-size:.8rem; color:var(--muted); }
