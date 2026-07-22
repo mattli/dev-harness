@@ -178,3 +178,15 @@ usage-limit** as a first-class graceful pause. When asked whether one of these d
 accurate — or before quoting any cap/default/halt-reason from one — read
 `src/config/defaults.ts` and `src/budget/tracker.ts` (the `StopReason` list), not the
 doc and not memory. Treat the code as the source of truth; the prose is downstream.
+
+## Harness Runs Can Dirty the Target's Working Tree
+A dev-harness run can leave uncommitted generation artifacts in the TARGET
+repo's main working tree — not only inside its own `.dev-harness-worktrees/`
+worktree. Observed 2026-07-22 (run mrviv2mw, dashboard v2 port, dev-harness on
+itself): an early-sprint reader/server draft plus an orphan `metrics/` fixture
+sat uncommitted in `main`'s working tree, fully superseded by the committed
+`run-<id>` branch. Harmless when the target's tree is clean, but a run against a
+repo with uncommitted work could clobber it. The trustworthy deliverable is the
+committed `run-<id>` branch — so after a run, `git status` the target and
+stash/discard stray working-tree changes rather than committing them. (Root
+cause — generation not fully isolated to the worktree — is an open backlog item.)
