@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   assembleDashboardData,
   findLatestRunDir,
+  findLatestRunAcrossProjects,
   resolveAndAssemble,
 } from "../src/dashboard/reader.js";
 
@@ -366,5 +367,44 @@ describe("assembleDashboardData — c5 per-sprint metrics derived from the trace
     const current = result.sprintBreakdown[result.currentSprint as number];
     expect(current.state).toBe("running");
     expect(typeof current.activePhase).toBe("number");
+  });
+});
+
+describe("findLatestRunAcrossProjects — cross-project newest-run discovery", () => {
+  const writeRun = (root: string, project: string, run: string, runId: string, ageSec: number) => {
+    const dir = join(root, project, run);
+    mkdirSync(dir, { recursive: true });
+    const statePath = join(dir, "state.json");
+    writeFileSync(statePath, JSON.stringify({ runId, status: "running" }));
+    const t = Date.now() / 1000 + ageSec;
+    utimesSync(statePath, t, t);
+    return dir;
+  };
+
+  test("returns null when the runs root is absent", () => {
+    expect(findLatestRunAcrossProjects(join(tmpdir(), "does-not-exist-xyz"))).toBeNull();
+  });
+
+  test("picks the run whose state.json is newest, across different projects", () => {
+    const root = mkdtempSync(join(tmpdir(), "xproj-"));
+    writeRun(root, "projA", "r1", "OLD", -500);
+    const newest = writeRun(root, "projB", "r2", "NEW", -1);
+    expect(findLatestRunAcrossProjects(root)).toBe(newest);
+    expect(readJson(join(findLatestRunAcrossProjects(root) as string, "state.json")).runId).toBe("NEW");
+  });
+
+  test("skips the _archive project even when it holds the newest state.json", () => {
+    const root = mkdtempSync(join(tmpdir(), "xproj-arch-"));
+    const live = writeRun(root, "voice-tutor", "r1", "LIVE", -100);
+    writeRun(root, "_archive", "r2", "ARCHIVED", 0); // newest mtime, must be skipped
+    expect(findLatestRunAcrossProjects(root)).toBe(live);
+  });
+
+  test("ignores project entries with no run folders and dirs lacking state.json", () => {
+    const root = mkdtempSync(join(tmpdir(), "xproj-empty-"));
+    mkdirSync(join(root, "emptyProject"), { recursive: true });
+    mkdirSync(join(root, "projX", "not-a-run"), { recursive: true }); // no state.json
+    const only = writeRun(root, "projX", "real-run", "ONLY", -10);
+    expect(findLatestRunAcrossProjects(root)).toBe(only);
   });
 });
