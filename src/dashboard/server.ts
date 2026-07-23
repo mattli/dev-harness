@@ -460,7 +460,7 @@ function renderGoalPage(data: DashboardData): string {
 </head>
 <body>
 <main class="wrap goal-page">
-<a class="back-link" href="/">← Back to run</a>
+<a class="back-link" href=".">← Back to run</a>
 <div class="goal-doc" id="goalDoc">${renderGoalMarkdown(data.goal)}</div>
 </main>
 </body>
@@ -632,13 +632,18 @@ function renderPage(data: DashboardData): string {
       '<span class="run-id-tag"><span class="id-key">Run ID:</span><span id="runId">' + dash(d.runId) + '</span></span>' +
       '<span class="pill ' + esc(status) + '" id="statusPill">' + esc(status) + '</span></div></header>';
   }
+  // Base path the page was served under, derived from the current URL so the
+  // dashboard's own links/fetch stay under whatever mount it lives behind:
+  // "" at localhost:8765/, "/dashboard" behind the tailnet /dashboard proxy.
+  // Trailing slashes stripped so BASE + "/data" is always well-formed.
+  var BASE = location.pathname.replace(/\/+$/, "");
   function goalHTML(d) {
     if (isPlanning(d)) {
       return '<div class="goal-area" id="goalArea"><div class="goal-eyebrow">Goal</div>' +
         '<p class="goal-line" id="goalLine">' + dash(d.oneLineGoal) + '</p>' +
-        '<a class="goal-link" id="viewGoal" href="/goal">View full goal ↗</a></div>';
+        '<a class="goal-link" id="viewGoal" href="' + BASE + '/goal">View full goal ↗</a></div>';
     }
-    return '<div class="goal-area" id="goalArea"><a class="goal-link small" id="viewGoal" href="/goal">View goal ↗</a></div>';
+    return '<div class="goal-area" id="goalArea"><a class="goal-link small" id="viewGoal" href="' + BASE + '/goal">View goal ↗</a></div>';
   }
   function tile(label, valueHTML, id) {
     return '<div class="tile"><div class="tile-label">' + label + '</div><div class="tile-value" id="' + id + '">' + valueHTML + '</div></div>';
@@ -710,9 +715,14 @@ function renderPage(data: DashboardData): string {
     if (deg) { deg.hidden = !d.stale; deg.textContent = d.stale ? "(updating…)" : ""; }
   }
   function poll() {
-    fetch("/data", { cache: "no-store" })
+    fetch(BASE + "/data", { cache: "no-store" })
       .then(function (r) { return r.json(); })
-      .then(apply)
+      // Only paint real dashboard payloads. A misrouted request (e.g. hitting a
+      // neighbouring app that answers 200 {"detail":"Not Found"}) parses as JSON
+      // but lacks our shape; sprintBreakdown is an array in every legit payload
+      // (real and degraded), absent in junk — so guarding on it keeps the last
+      // good render instead of blanking the page.
+      .then(function (d) { if (d && Array.isArray(d.sprintBreakdown)) apply(d); })
       .catch(function () { /* keep last-known-good; try again next tick */ });
   }
   setInterval(poll, 2000);

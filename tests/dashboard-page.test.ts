@@ -102,14 +102,21 @@ describe("dashboard page — c2/c4 v2 stats tile is anchored by a stable id the 
 });
 
 describe("dashboard page — c4 client-side polling, no meta-refresh", () => {
-  test("served JS uses setInterval + fetch('/data') + a DOM-mutation API", async () => {
+  test("served JS uses setInterval + a mount-relative fetch of /data + a DOM-mutation API", async () => {
     const s = await launch(fx("complete"));
     const body = await getText(`${s.url}/`);
 
     // Evidence of an interval-driven poll loop.
     expect(body).toMatch(/setInterval\s*\(/);
-    // The fetch targets the /data endpoint specifically.
-    expect(body).toMatch(/fetch\s*\(\s*["']\/data["']/);
+    // The base path is derived from the URL the page was served under, so the
+    // dashboard's own links/fetch stay under whatever mount proxies it
+    // (root at localhost, /dashboard behind the tailnet proxy).
+    expect(body).toMatch(/BASE\s*=\s*location\.pathname\.replace\(/);
+    // The fetch targets /data under that derived base, not a root-absolute path.
+    expect(body).toMatch(/fetch\s*\(\s*BASE\s*\+\s*["']\/data["']/);
+    // A misrouted response that parses as JSON but lacks our shape must NOT be
+    // painted — the poll guards on sprintBreakdown before applying.
+    expect(body).toMatch(/Array\.isArray\(\s*d\.sprintBreakdown\s*\)/);
     // The page mutates the DOM in place (any of these DOM APIs).
     expect(body).toMatch(/getElementById|querySelector|textContent|innerHTML/);
   });
