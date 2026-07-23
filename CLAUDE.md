@@ -48,6 +48,19 @@ nested under `response.details` — were likewise visible only against real
 responses. Related: [[Test Guarantees at Their Real-I/O Boundary]] is the same
 gap at the unit level; this is its integration-level twin.
 
+**Second worked example — and the sharper rule (2026-07-23, `claims.py` LLM
+extraction).** A mocked suite can never test the *transport*, so for an
+LLM-calling module make the credentialed smoke a **budgeted** contract acceptance
+criterion (~cents), not just a review step. `claims.py` passed 2 harness sprints
+(97, 98) and 3 review rounds green, yet real Sonnet output broke it 3 ways
+invisible to the mock: ```json fences around "JSON-only" output, a strict-tool
+array double-encoded as a JSON string, and `max_tokens` truncation on a dense doc
+— plus a deeper design flaw (the mock's hand-fed verbatim anchors hid a whole
+resolution-layer bug family, since real models drift/hallucinate quotes). The
+smoke only ran because a reviewer chose to; the contract's Definition of Done was
+"hermetic suite passes," blind to all of it. Full writeup:
+`docs/solutions/conventions/credentialed-smoke-as-contract-acceptance.md`.
+
 ## Don't Parse Model Output by Position — Emit a Marker and Key on It
 When extracting a value from LLM output, have the model emit a guaranteed,
 unambiguous marker (a labeled sentinel it's told to output exactly once, or
