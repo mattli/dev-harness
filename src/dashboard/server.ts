@@ -636,7 +636,7 @@ function renderPage(data: DashboardData): string {
   // dashboard's own links/fetch stay under whatever mount it lives behind:
   // "" at localhost:8765/, "/dashboard" behind the tailnet /dashboard proxy.
   // Trailing slashes stripped so BASE + "/data" is always well-formed.
-  var BASE = location.pathname.replace(/\/+$/, "");
+  var BASE = location.pathname.replace(/\\/+$/, "");
   function goalHTML(d) {
     if (isPlanning(d)) {
       return '<div class="goal-area" id="goalArea"><div class="goal-eyebrow">Goal</div>' +
@@ -704,6 +704,26 @@ function renderPage(data: DashboardData): string {
     var cards = (d.sprintBreakdown || []).map(stepHTML).join("");
     return '<section class="steps" id="steps">' + cards + '</section>';
   }
+  // --- Live elapsed clock -------------------------------------------------
+  // statsHTML repaints the duration tile from the server's authoritative
+  // elapsedMs on every poll (every 2s); between polls we advance it locally once
+  // a second so it reads as a live clock and keeps ticking through a slow or
+  // dropped poll. Each successful poll re-anchors us to the server value,
+  // correcting any drift. We stop ticking once the run is finished (the tile then
+  // shows a fixed final duration).
+  var clockBaseMs = null;    // server elapsedMs at the last sync
+  var clockAnchorMs = null;  // client Date.now() at the last sync
+  var clockLive = false;     // advance locally only while the run is active
+  function syncClock(d) {
+    clockBaseMs = (typeof d.elapsedMs === "number" && isFinite(d.elapsedMs)) ? d.elapsedMs : null;
+    clockAnchorMs = Date.now();
+    clockLive = clockBaseMs !== null && !finished(d.status);
+  }
+  function tickClock() {
+    if (!clockLive || clockBaseMs === null) return;
+    var el = byId("tileDuration");
+    if (el) el.textContent = fmtElapsed(clockBaseMs + (Date.now() - clockAnchorMs));
+  }
   function apply(d) {
     setHTML("header", headerHTML(d));
     setHTML("strip", stripHTML(d));
@@ -711,6 +731,7 @@ function renderPage(data: DashboardData): string {
     setHTML("statsWrap", statsHTML(d));
     setHTML("haltWrap", haltHTML(d));
     setHTML("sprintsWrap", sprintsHTML(d));
+    syncClock(d);
     var deg = byId("degraded");
     if (deg) { deg.hidden = !d.stale; deg.textContent = d.stale ? "(updating…)" : ""; }
   }
@@ -726,6 +747,7 @@ function renderPage(data: DashboardData): string {
       .catch(function () { /* keep last-known-good; try again next tick */ });
   }
   setInterval(poll, 2000);
+  setInterval(tickClock, 1000);
   poll();
 })();
 </script>
