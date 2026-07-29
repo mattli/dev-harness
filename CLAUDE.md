@@ -203,3 +203,15 @@ repo with uncommitted work could clobber it. The trustworthy deliverable is the
 committed `run-<id>` branch — so after a run, `git status` the target and
 stash/discard stray working-tree changes rather than committing them. (Root
 cause — generation not fully isolated to the worktree — is an open backlog item.)
+
+## Test Emitted Code by Executing It, Not Substring-Matching
+When one runtime emits source as a string for another to run (the dashboard server
+templates client-side JS into a backtick literal), a test that greps the emitted
+string proves the tokens exist, not that the code parses or works. Compile it
+(`new vm.Script(js)` throws on syntax errors) and, where feasible, run it in a stub
+environment and assert behavior. Escaping is the usual trigger: a `\` in emitted
+code is eaten by the host string first, so `\/` in source ships `/` — which is how a
+regex became `//…` (a comment) and silently killed the whole dashboard polling
+script while `tsc`, substring tests, and `curl` all stayed green. Guardrail lives in
+`tests/dashboard-client-script.test.ts`. Worked example:
+`docs/solutions/conventions/test-emitted-code-by-executing-it.md`.
