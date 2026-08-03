@@ -569,9 +569,31 @@ function renderPage(data: DashboardData): string {
   .phase.active { color:var(--accent); font-weight:600; } .phase.active .dot { background:var(--accent); }
   .phase.stopped { color:var(--warn); font-weight:600; } .phase.stopped .dot { background:var(--warn); }
   .pipe .arrow { color:var(--faint); font-size:.7rem; }
+  /* Active-phase pulse: a soft accent ring that expands out of the active
+     element and fades ("this is happening now"). Attached by ::after to the
+     existing active-state selectors, so it applies to both the server render
+     and the client-rebuilt DOM with no markup change. Base opacity:0 means the
+     global prefers-reduced-motion rule below (which kills the animation) leaves
+     nothing showing. The resting accent-soft halo on the nodes stays; the ring
+     breathes out of it. */
+  .stage.current .stage-node, .phase.active .dot { position:relative; }
+  .stage.current .stage-node::after,
+  .step.running .node::after,
+  .phase.active .dot::after {
+    content:""; position:absolute; left:50%; top:50%; width:100%; height:100%;
+    border-radius:50%; transform:translate(-50%,-50%); pointer-events:none;
+    opacity:0; box-shadow:0 0 0 2px var(--accent);
+    animation:ring 2.6s cubic-bezier(.33,0,.29,1) infinite;
+  }
+  .phase.active .dot::after { box-shadow:0 0 0 1.5px var(--accent); }
   .planning-card { display:flex; align-items:center; gap:.8rem; background:var(--surface); border:1px dashed var(--border-strong); border-radius:var(--radius); padding:1.25rem; color:var(--muted); font-size:.92rem; }
   .spin { width:17px; height:17px; border-radius:50%; border:2px solid var(--border-strong); border-top-color:var(--accent); animation:spin .8s linear infinite; flex:none; }
   @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes ring {
+    0%   { opacity:.55; transform:translate(-50%,-50%) scale(.78); }
+    70%  { opacity:0;   transform:translate(-50%,-50%) scale(1.55); }
+    100% { opacity:0;   transform:translate(-50%,-50%) scale(1.55); }
+  }
   @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
 </style>
 </head>
