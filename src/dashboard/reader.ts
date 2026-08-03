@@ -155,6 +155,22 @@ export const PHASE_INDEX: Record<string, number> = {
   DECIDE: 3,
 };
 
+/** For a RUNNING sprint, phase trace events are written at phase COMPLETION
+ *  (NEGOTIATE at contract freeze, GENERATE after a build attempt, EVALUATE after
+ *  scoring), so the last recorded phase is the one that just FINISHED — the phase
+ *  actually executing is the NEXT one. This maps last-completed → now-executing.
+ *  EVALUATE maps back to GENERATE: a still-running sprint that evaluated without
+ *  advancing is on a retry build (had it advanced, DECIDE would have moved the
+ *  current sprint on). No phase event yet ⇒ still NEGOTIATE (handled at the call
+ *  site). Reading the last COMPLETED phase instead would lag the label a full
+ *  phase behind reality — e.g. show "Negotiate" while it is actually generating. */
+const EXECUTING_PHASE: Record<string, number> = {
+  NEGOTIATE: PHASE_INDEX.GENERATE,
+  GENERATE: PHASE_INDEX.EVALUATE,
+  EVALUATE: PHASE_INDEX.GENERATE,
+  DECIDE: PHASE_INDEX.DECIDE,
+};
+
 /** Per-sprint breakdown from existing data: rounds = the frozen contractVersion
  *  on each sprint's NEGOTIATE event; score = that sprint's latest EVALUATE
  *  score; attempts = the count of GENERATE events for the sprint (NOT
@@ -222,15 +238,24 @@ function deriveSprintBreakdown(
     else if (currentSprint !== null && i < currentSprint) cardState = "done";
     else if (finished && (currentSprint === null || i <= currentSprint)) cardState = "done";
     else cardState = "pending";
-    // Fallback when a running/halted sprint has emitted no pipeline-phase trace
-    // event yet: it is by construction still NEGOTIATE. GENERATE and EVALUATE
-    // always emit their own event when they run; only NEGOTIATE is silent until
-    // the contract freezes, so "no phase event yet" ⇒ negotiating (index 0), not
-    // generating. Key on the named constant, never a bare index.
-    const active =
-      cardState === "running" || cardState === "halted"
-        ? PHASE_INDEX[lastPhaseBySprint.get(i) ?? "NEGOTIATE"] ?? PHASE_INDEX.NEGOTIATE
-        : null;
+    // Which phase to highlight as active on the sprint card:
+    //   - RUNNING: the phase currently EXECUTING. Phase events are recorded at
+    //     completion, so the executing phase is the one AFTER the last recorded
+    //     phase (EXECUTING_PHASE). Before any phase event the sprint is still
+    //     negotiating. (Showing the last COMPLETED phase lags a full phase behind:
+    //     "Negotiate" while actually generating.)
+    //   - HALTED: the phase it STOPPED at — the last recorded phase. Graceful
+    //     halts land at phase boundaries (or mid-negotiation, before any event),
+    //     so the last completed phase is where it stopped; never last+1.
+    // No phase event yet ⇒ NEGOTIATE for both. Keyed on named constants, never a
+    // bare index, so a drift from the PHASE_INDEX order fails a test loudly.
+    const lastPhase = lastPhaseBySprint.get(i);
+    let active: number | null = null;
+    if (cardState === "running") {
+      active = lastPhase === undefined ? PHASE_INDEX.NEGOTIATE : EXECUTING_PHASE[lastPhase] ?? PHASE_INDEX.NEGOTIATE;
+    } else if (cardState === "halted") {
+      active = lastPhase === undefined ? PHASE_INDEX.NEGOTIATE : PHASE_INDEX[lastPhase] ?? PHASE_INDEX.NEGOTIATE;
+    }
     // A halted card shows the BEST score the sprint reached ("best N"); every
     // other card shows the latest score.
     const score =

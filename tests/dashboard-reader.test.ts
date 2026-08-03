@@ -400,6 +400,65 @@ describe("assembleDashboardData — c5 per-sprint metrics derived from the trace
     expect(current.state).toBe("running");
     expect(current.activePhase).toBe(PHASE_INDEX.NEGOTIATE); // 0, not 1
   });
+
+  // Phase trace events are written at phase COMPLETION, so for a RUNNING sprint the
+  // phase actually executing is the one AFTER the last recorded phase. Showing the
+  // last completed phase lags a full phase behind reality (the "Negotiate while it
+  // is actually generating" bug). These pin the last-completed → now-executing map.
+  const runningWithTrace = (phases: Array<Record<string, unknown>>, status = "running") => {
+    const dir = mkdtempSync(join(tmpdir(), "dash-phase-"));
+    writeFileSync(
+      join(dir, "state.json"),
+      JSON.stringify({
+        runId: "p", goal: "g", startedAt: "2026-07-21T10:00:00.000Z",
+        status, sprints: [{ id: 0, title: "T", description: "d" }],
+        currentSprint: 0, contractVersion: 5, scores: [],
+      }),
+    );
+    writeFileSync(
+      join(dir, "trace.jsonl"),
+      [{ phase: "PLAN", sprint: 0, outputDigest: "1 sprints" }, ...phases]
+        .map((e) => JSON.stringify(e)).join("\n") + "\n",
+    );
+    return assembleDashboardData(dir, NOW).sprintBreakdown[0];
+  };
+
+  test("running sprint whose last event is NEGOTIATE-freeze shows GENERATE (building, not negotiating)", () => {
+    // The exact live case: negotiation froze, generation is underway but hasn't
+    // recorded its GENERATE event yet. Must read as Generate, not Negotiate.
+    const s = runningWithTrace([{ phase: "NEGOTIATE", sprint: 0, contractVersion: 5, outputDigest: "frozen (round-cap)" }]);
+    expect(s.state).toBe("running");
+    expect(s.activePhase).toBe(PHASE_INDEX.GENERATE); // 1, not 0
+  });
+
+  test("running sprint whose last event is a GENERATE attempt shows EVALUATE", () => {
+    const s = runningWithTrace([
+      { phase: "NEGOTIATE", sprint: 0, contractVersion: 5, outputDigest: "frozen" },
+      { phase: "GENERATE", sprint: 0, costUsd: 1, toolCalls: [] },
+    ]);
+    expect(s.activePhase).toBe(PHASE_INDEX.EVALUATE); // 2
+  });
+
+  test("running sprint that evaluated without advancing shows GENERATE (a retry build)", () => {
+    const s = runningWithTrace([
+      { phase: "NEGOTIATE", sprint: 0, contractVersion: 5, outputDigest: "frozen" },
+      { phase: "GENERATE", sprint: 0, costUsd: 1, toolCalls: [] },
+      { phase: "EVALUATE", sprint: 0, outputDigest: "score 40", score: 40 },
+    ]);
+    expect(s.activePhase).toBe(PHASE_INDEX.GENERATE); // 1 — looping back to build
+  });
+
+  test("HALTED sprint shows the phase it stopped at (last completed), not the next one", () => {
+    // Halted differs from running: it is not executing, so it shows where it
+    // STOPPED — graceful halts land at phase boundaries — never last+1.
+    const s = runningWithTrace([
+      { phase: "NEGOTIATE", sprint: 0, contractVersion: 5, outputDigest: "frozen" },
+      { phase: "GENERATE", sprint: 0, costUsd: 1, toolCalls: [] },
+      { phase: "EVALUATE", sprint: 0, outputDigest: "score 40", score: 40 },
+    ], "halted");
+    expect(s.state).toBe("halted");
+    expect(s.activePhase).toBe(PHASE_INDEX.EVALUATE); // 2 — where it stopped, no +1
+  });
 });
 
 describe("findLatestRunAcrossProjects — cross-project newest-run discovery", () => {
