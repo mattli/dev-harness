@@ -144,8 +144,11 @@ function deriveScores(events: TraceEvent[], stateScores: unknown): ScoreEntry[] 
 
 /** The v2 phase pipeline order used for the active-sprint stepper and the
  *  `activePhase` index. NEGOTIATE→0, GENERATE→1, EVALUATE→2, DECIDE→3. PLAN
- *  events precede any sprint's pipeline and map to no pipeline index. */
-const PHASE_INDEX: Record<string, number> = {
+ *  events precede any sprint's pipeline and map to no pipeline index.
+ *  Exported so tests can pin the ordering itself (a bare literal index in the
+ *  active-phase fallback previously drifted from this order — see the running-
+ *  sprint fallback below). */
+export const PHASE_INDEX: Record<string, number> = {
   NEGOTIATE: 0,
   GENERATE: 1,
   EVALUATE: 2,
@@ -219,9 +222,14 @@ function deriveSprintBreakdown(
     else if (currentSprint !== null && i < currentSprint) cardState = "done";
     else if (finished && (currentSprint === null || i <= currentSprint)) cardState = "done";
     else cardState = "pending";
+    // Fallback when a running/halted sprint has emitted no pipeline-phase trace
+    // event yet: it is by construction still NEGOTIATE. GENERATE and EVALUATE
+    // always emit their own event when they run; only NEGOTIATE is silent until
+    // the contract freezes, so "no phase event yet" ⇒ negotiating (index 0), not
+    // generating. Key on the named constant, never a bare index.
     const active =
       cardState === "running" || cardState === "halted"
-        ? PHASE_INDEX[lastPhaseBySprint.get(i) ?? "GENERATE"] ?? 1
+        ? PHASE_INDEX[lastPhaseBySprint.get(i) ?? "NEGOTIATE"] ?? PHASE_INDEX.NEGOTIATE
         : null;
     // A halted card shows the BEST score the sprint reached ("best N"); every
     // other card shows the latest score.

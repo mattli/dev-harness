@@ -8,6 +8,7 @@ import {
   findLatestRunDir,
   findLatestRunAcrossProjects,
   resolveAndAssemble,
+  PHASE_INDEX,
 } from "../src/dashboard/reader.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -367,6 +368,37 @@ describe("assembleDashboardData — c5 per-sprint metrics derived from the trace
     const current = result.sprintBreakdown[result.currentSprint as number];
     expect(current.state).toBe("running");
     expect(typeof current.activePhase).toBe("number");
+  });
+
+  // The phase pipeline order is the contract the active-phase fallback depends
+  // on. Pin it by name so a hardcoded index that drifts from this order fails
+  // loudly (the negotiate-shown-as-generate bug was a bare `1` in that fallback).
+  test("PHASE_INDEX orders the pipeline NEGOTIATE→0, GENERATE→1, EVALUATE→2, DECIDE→3", () => {
+    expect(PHASE_INDEX).toEqual({ NEGOTIATE: 0, GENERATE: 1, EVALUATE: 2, DECIDE: 3 });
+  });
+
+  test("a running sprint that has only PLANned (no pipeline trace event yet) is NEGOTIATE, not GENERATE", () => {
+    // Real scenario: NEGOTIATE is traced only at contract freeze, so a sprint
+    // mid-negotiation has emitted no pipeline-phase event yet — its trace holds
+    // only PLAN. The active phase must be Negotiate (index 0), never the bare
+    // Generate (index 1) the fallback used to hardcode.
+    const dir = mkdtempSync(join(tmpdir(), "dash-negotiating-"));
+    writeFileSync(
+      join(dir, "state.json"),
+      JSON.stringify({
+        runId: "neg", goal: "g", startedAt: "2026-07-21T10:00:00.000Z",
+        status: "running", sprints: [{ id: 0, title: "T", description: "d" }],
+        currentSprint: 0, contractVersion: 0, scores: [],
+      }),
+    );
+    writeFileSync(
+      join(dir, "trace.jsonl"),
+      JSON.stringify({ phase: "PLAN", sprint: 0, agentRole: "planner", outputDigest: "1 sprints" }) + "\n",
+    );
+    const result = assembleDashboardData(dir, NOW);
+    const current = result.sprintBreakdown[0];
+    expect(current.state).toBe("running");
+    expect(current.activePhase).toBe(PHASE_INDEX.NEGOTIATE); // 0, not 1
   });
 });
 
