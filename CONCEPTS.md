@@ -68,6 +68,19 @@ asking the model to ignore them.
 (`--test-cmd`) in the worktree and reports pass/fail plus findings. Its result is the
 hard signal the scorer trusts; unlike the agents, it is not a model.
 
+**Credentialed smoke** — A small, budgeted run of a built artifact against the *real*
+provider and real fixtures, as opposed to the hermetic suite's mocks. It is the only
+thing that tests the transport — how the provider actually behaves — because a mock
+substitutes the exact boundary the artifact exists to cross. For an artifact whose
+core job is a network or LLM call, this belongs in the contract's acceptance
+criteria, not in a reviewer's discretion.
+
+**Answer key** — A frozen, human-labelled set of expected results that a built
+artifact is graded against, distinct from the artifact's own tests. It is a record:
+once a run has been graded on it, it is never edited to make a result agree. When the
+artifact and the key disagree on principle, the disagreement is surfaced as a
+finding rather than tuned away.
+
 **Worktree** — A throwaway git checkout of the target project that a run works inside, so
 generated code and test runs are isolated from the user's real repository. The generator
 and the critic run here; the blind scorer does not.

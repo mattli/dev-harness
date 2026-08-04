@@ -204,6 +204,28 @@ committed `run-<id>` branch — so after a run, `git status` the target and
 stash/discard stray working-tree changes rather than committing them. (Root
 cause — generation not fully isolated to the worktree — is an open backlog item.)
 
+## Validate a Fix Against More Than the Case That Motivated It
+A fix aimed at one observed failure, validated against that same failure, is only
+shown to be *sufficient* — not principled. Strip the case-specific scaffolding,
+restate the rule at the level of the principle, and re-run the acceptance ONCE
+without iterating; report either outcome as a result (a flip-back is a finding, not
+a failure). This bit twice in one session, in two different registers: a judge
+prompt whose rules encoded the structure of the single case they fixed, and a
+dashboard phase-label fix that repaired only the first moment of the lifecycle
+while every phase hand-off stayed wrong. The cheap counter is a
+generalize-then-re-run experiment. Worked example:
+`docs/solutions/conventions/generalize-then-rerun-to-prove-a-fix-is-principled.md`.
+
+## An Event Logged at Completion Means the Latest Entry Is the Past, Not the Present
+When a log records completions, the newest entry describes what just *finished* —
+so rendering it as the current state lags reality by one step. In the run loop each
+phase writes its trace event when it ends (NEGOTIATE at contract freeze, GENERATE
+after a build attempt), which is exactly how the dashboard showed "Negotiate" while
+generating and "Generate" while evaluating, all the way down. Derive the executing
+state as the one AFTER the last recorded event for a RUNNING sprint; a halted
+sprint is the exception — it shows where it stopped. Pinned by tests in
+`tests/dashboard-reader.test.ts`.
+
 ## Test Emitted Code by Executing It, Not Substring-Matching
 When one runtime emits source as a string for another to run (the dashboard server
 templates client-side JS into a backtick literal), a test that greps the emitted
