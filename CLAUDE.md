@@ -237,3 +237,14 @@ regex became `//…` (a comment) and silently killed the whole dashboard polling
 script while `tsc`, substring tests, and `curl` all stayed green. Guardrail lives in
 `tests/dashboard-client-script.test.ts`. Worked example:
 `docs/solutions/conventions/test-emitted-code-by-executing-it.md`.
+
+## A Python Run's Verifier Interpreter Must Live Outside the Repo
+The harness runs `--test-cmd` inside a git worktree, which contains only tracked
+files — so a gitignored in-repo `.venv/` is exactly what isn't there. Provision
+the verifier env at a stable absolute path outside any repo
+(`~/.venvs/<project>`), pin its Python version deliberately, and pass that
+interpreter explicitly (`/Users/mattli/.venvs/foo/bin/python -m pytest -q`).
+Bare `pytest` resolves to the system Python 3.9 here, which has nothing
+installed, and every sprint dies at collection. State the env in the goal
+addendum so the critic can't freeze a contradicting criterion. Worked example:
+`docs/solutions/conventions/verifier-interpreter-lives-outside-the-repo.md`.
